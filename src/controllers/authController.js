@@ -130,4 +130,27 @@ const loginUser = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser };
+const getCurrentUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(401).json({ message: 'Authenticated user no longer exists.' });
+    }
+
+    return res.status(200).json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error(`Unable to get current user: ${error.message}`);
+    return res.status(500).json({ message: 'Unable to retrieve the current user.' });
+  }
+};
+
+module.exports = { registerUser, loginUser, getCurrentUser };
