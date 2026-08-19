@@ -25,7 +25,7 @@ Phase 1 establishes the basic backend foundation for the AI Project Management S
    copy .env.example .env
    ```
 
-3. Update `MONGODB_URI` in `.env` with your MongoDB connection string.
+3. Update the required variables in `.env` with your MongoDB connection string and JWT settings.
 
 ## Required environment variables
 
@@ -33,6 +33,8 @@ Phase 1 establishes the basic backend foundation for the AI Project Management S
 | --- | --- |
 | `PORT` | Port for the HTTP server. Defaults to `5000` if omitted. |
 | `MONGODB_URI` | MongoDB connection URI used by Mongoose. |
+| `JWT_SECRET` | Long, random secret used to sign login tokens. |
+| `JWT_EXPIRES_IN` | JWT lifetime, for example `1d`. |
 
 ## Run the server
 

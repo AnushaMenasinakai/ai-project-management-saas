@@ -1,4 +1,5 @@
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -101,7 +102,20 @@ const loginUser = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
+    const { JWT_SECRET, JWT_EXPIRES_IN } = process.env;
+
+    if (!JWT_SECRET || !JWT_EXPIRES_IN) {
+      console.error('JWT_SECRET or JWT_EXPIRES_IN is not configured.');
+      return res.status(500).json({ message: 'Unable to log in. Please try again later.' });
+    }
+
+    const token = jwt.sign({}, JWT_SECRET, {
+      subject: user._id.toString(),
+      expiresIn: JWT_EXPIRES_IN,
+    });
+
     return res.status(200).json({
+      token,
       user: {
         id: user._id,
         name: user.name,
