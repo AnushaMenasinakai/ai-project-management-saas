@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const Document = require('../models/Document');
 const Project = require('../models/Project');
+const DocumentChunk = require('../models/DocumentChunk');
+const chunkText = require('../utils/chunkText');
 
 // Create a document
 exports.createDocument = async (req, res) => {
@@ -43,6 +45,20 @@ exports.createDocument = async (req, res) => {
       uploadedBy: req.user.id,
       sourceType,
     });
+
+    // Split document content into chunks
+    const chunks = chunkText(document.content);
+
+    // Store the chunks in MongoDB
+    await DocumentChunk.insertMany(
+      chunks.map((content, index) => ({
+        document: document._id,
+        project: document.project,
+        content,
+        chunkIndex: index,
+      }))
+    );
+
 
     return res.status(201).json({
       message: 'Document created successfully.',
@@ -202,6 +218,23 @@ exports.updateDocument = async (req, res) => {
         runValidators: true,
       }
     );
+// Replace chunks when document content changes
+    if (content !== undefined) {
+  await DocumentChunk.deleteMany({
+    document: id,
+  });
+
+  const chunks = chunkText(updatedDocument.content);
+
+  await DocumentChunk.insertMany(
+    chunks.map((chunkContent, index) => ({
+      document: updatedDocument._id,
+      project: updatedDocument.project,
+      content: chunkContent,
+      chunkIndex: index,
+    }))
+  );
+}
 
     return res.status(200).json({
       message: 'Document updated successfully.',
@@ -246,11 +279,15 @@ exports.deleteDocument = async (req, res) => {
       });
     }
 
-    await Document.findByIdAndDelete(id);
+    await DocumentChunk.deleteMany({
+  document: id,
+});
 
-    return res.status(200).json({
-      message: 'Document deleted successfully.',
-    });
+await Document.findByIdAndDelete(id);
+
+return res.status(200).json({
+  message: 'Document deleted successfully.',
+});
   } catch (error) {
     console.error('Delete document error:', error);
 
