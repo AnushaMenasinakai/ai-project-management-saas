@@ -24,6 +24,11 @@ const documentChunkSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+
+    embedding: {
+  type: [Number],
+  required: true,
+},
   },
   {
     timestamps: true,

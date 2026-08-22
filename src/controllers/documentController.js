@@ -3,6 +3,7 @@ const Document = require('../models/Document');
 const Project = require('../models/Project');
 const DocumentChunk = require('../models/DocumentChunk');
 const chunkText = require('../utils/chunkText');
+const { generateEmbedding } = require('../services/embeddingService');
 
 // Create a document
 exports.createDocument = async (req, res) => {
@@ -47,17 +48,24 @@ exports.createDocument = async (req, res) => {
     });
 
     // Split document content into chunks
-    const chunks = chunkText(document.content);
+const chunks = chunkText(document.content);
 
-    // Store the chunks in MongoDB
-    await DocumentChunk.insertMany(
-      chunks.map((content, index) => ({
-        document: document._id,
-        project: document.project,
-        content,
-        chunkIndex: index,
-      }))
-    );
+const chunkDocuments = [];
+
+for (let index = 0; index < chunks.length; index += 1) {
+  const content = chunks[index];
+  const embedding = await generateEmbedding(content);
+
+  chunkDocuments.push({
+    document: document._id,
+    project: document.project,
+    content,
+    chunkIndex: index,
+    embedding,
+  });
+}
+
+await DocumentChunk.insertMany(chunkDocuments);
 
 
     return res.status(201).json({
@@ -226,14 +234,22 @@ exports.updateDocument = async (req, res) => {
 
   const chunks = chunkText(updatedDocument.content);
 
-  await DocumentChunk.insertMany(
-    chunks.map((chunkContent, index) => ({
-      document: updatedDocument._id,
-      project: updatedDocument.project,
-      content: chunkContent,
-      chunkIndex: index,
-    }))
-  );
+const chunkDocuments = [];
+
+for (let index = 0; index < chunks.length; index += 1) {
+  const content = chunks[index];
+  const embedding = await generateEmbedding(content);
+
+  chunkDocuments.push({
+    document: document._id,
+    project: document.project,
+    content,
+    chunkIndex: index,
+    embedding,
+  });
+}
+
+await DocumentChunk.insertMany(chunkDocuments);
 }
 
     return res.status(200).json({
