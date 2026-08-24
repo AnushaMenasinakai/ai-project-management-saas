@@ -3,6 +3,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import Projects from './pages/Projects';
+import ProjectDetails from './pages/ProjectDetails';
 
 const App = () => {
   return (
@@ -23,6 +24,14 @@ const App = () => {
          element={
         <ProtectedRoute>
       <Projects />
+    </ProtectedRoute>
+  }
+/>
+        <Route
+        path="/projects/:id"
+        element={
+       <ProtectedRoute>
+      <ProjectDetails />
     </ProtectedRoute>
   }
 />
