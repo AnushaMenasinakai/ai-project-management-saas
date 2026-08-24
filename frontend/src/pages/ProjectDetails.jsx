@@ -15,6 +15,8 @@ const ProjectDetails = () => {
   const [status, setStatus] = useState('planning');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
    
   const handleUpdateProject = async (event) => {
   event.preventDefault();
@@ -47,6 +49,33 @@ const ProjectDetails = () => {
     setSaving(false);
   }
 };
+  
+const handleDeleteProject = async () => {
+  const confirmed = window.confirm(
+    'Are you sure you want to delete this project? This action cannot be undone.'
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setDeleting(true);
+    setDeleteError('');
+
+    await api.delete(`/projects/${id}`);
+
+    navigate('/projects');
+  } catch (err) {
+    console.error('Delete project error:', err);
+
+    setDeleteError(
+      err.response?.data?.message || 'Failed to delete project.'
+    );
+  } finally {
+    setDeleting(false);
+  }
+};
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -75,6 +104,16 @@ const ProjectDetails = () => {
     return (
       <div>
         <p>{error}</p>
+        {deleteError && <p>{deleteError}</p>}
+
+<button
+  type="button"
+  onClick={handleDeleteProject}
+  disabled={deleting}
+>
+  {deleting ? 'Deleting...' : 'Delete Project'}
+</button>
+
 
         <button type="button" onClick={() => navigate('/projects')}>
           Back to Projects
@@ -153,6 +192,8 @@ return (
 
     <p>Status: {project.status}</p>
 
+    {deleteError && <p>{deleteError}</p>}
+
     <button
       type="button"
       onClick={() => {
@@ -166,7 +207,18 @@ return (
       Edit Project
     </button>
 
-    <button type="button" onClick={() => navigate('/projects')}>
+    <button
+      type="button"
+      onClick={handleDeleteProject}
+      disabled={deleting}
+    >
+      {deleting ? 'Deleting...' : 'Delete Project'}
+    </button>
+
+    <button
+      type="button"
+      onClick={() => navigate('/projects')}
+    >
       Back to Projects
     </button>
   </div>
