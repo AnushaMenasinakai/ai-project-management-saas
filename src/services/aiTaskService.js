@@ -28,8 +28,17 @@ const validateGeneratedTasks = (result) => {
     throw new Error('AI task response must contain between 5 and 10 tasks.');
   }
 
+  const taskIds = new Set();
+
   result.tasks.forEach((task) => {
-    const expectedFields = ['title', 'description', 'priority', 'dueDate'];
+    const expectedFields = [
+      'id',
+      'title',
+      'description',
+      'priority',
+      'dueDate',
+      'dependsOn',
+    ];
 
     if (
       !task ||
@@ -37,15 +46,44 @@ const validateGeneratedTasks = (result) => {
       Array.isArray(task) ||
       Object.keys(task).length !== expectedFields.length ||
       !expectedFields.every((field) => Object.hasOwn(task, field)) ||
+      typeof task.id !== 'string' ||
+      !task.id.trim() ||
       typeof task.title !== 'string' ||
       !task.title.trim() ||
       typeof task.description !== 'string' ||
       !task.description.trim() ||
       !allowedPriorities.includes(task.priority) ||
-      !isValidDate(task.dueDate)
+      !isValidDate(task.dueDate) ||
+      !Array.isArray(task.dependsOn) ||
+      !task.dependsOn.every(
+        (dependencyId) =>
+          typeof dependencyId === 'string' && dependencyId.trim()
+      )
     ) {
       throw new Error('AI returned an invalid task.');
     }
+
+    if (taskIds.has(task.id)) {
+      throw new Error('AI returned duplicate task IDs.');
+    }
+
+    taskIds.add(task.id);
+  });
+
+  result.tasks.forEach((task) => {
+    task.dependsOn.forEach((dependencyId) => {
+      if (!taskIds.has(dependencyId)) {
+        throw new Error(
+          `AI task ${task.id} references an unknown dependency.`
+        );
+      }
+
+      if (dependencyId === task.id) {
+        throw new Error(
+          `AI task ${task.id} cannot depend on itself.`
+        );
+      }
+    });
   });
 
   return result;
@@ -67,16 +105,24 @@ Generate 5 to 10 actionable tasks for this project.
 Project name: ${projectName.trim()}
 Project description: ${projectDescription.trim()}
 
+Each task must have a unique temporary ID such as task_1, task_2, task_3.
+dependsOn must contain only IDs of other tasks in this response.
+Use an empty array when a task has no dependencies.
+Do not create circular dependencies.
+Do not use MongoDB ObjectIds.
+
 Return JSON only, with no markdown or explanation, in exactly this shape:
 {
-  "tasks": [
-    {
-      "title": "string",
-      "description": "string",
-      "priority": "low | medium | high",
-      "dueDate": "YYYY-MM-DD"
-    }
-  ]
+"tasks": [
+{
+"id": "task_1",
+"title": "string",
+"description": "string",
+"priority": "low | medium | high",
+"dueDate": "YYYY-MM-DD",
+"dependsOn": []
+}
+]
 }
 `;
 

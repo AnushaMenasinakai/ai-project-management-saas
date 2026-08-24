@@ -29,7 +29,7 @@ exports.generateTasks = async (req, res) => {
       project.description
     );
 
-    const tasksToCreate = tasks.map((task) => ({
+    const taskDocuments = tasks.map((task) => ({
       title: task.title,
       description: task.description,
       project: project._id,
@@ -38,11 +38,46 @@ exports.generateTasks = async (req, res) => {
       dueDate: task.dueDate,
     }));
 
-    const createdTasks = await Task.insertMany(tasksToCreate);
+    const createdTasks = await Task.insertMany(taskDocuments);
+
+    const taskIdMap = new Map();
+
+    tasks.forEach((task, index) => {
+      taskIdMap.set(task.id, createdTasks[index]._id);
+    });
+
+    const updates = createdTasks.map((createdTask, index) => ({
+      _id: createdTask._id,
+      dependencies: tasks[index].dependsOn.map((dependencyId) => {
+        const dependencyObjectId = taskIdMap.get(dependencyId);
+
+        if (!dependencyObjectId) {
+          throw new Error(
+            `Could not resolve dependency ${dependencyId}.`
+          );
+        }
+
+        return dependencyObjectId;
+      }),
+    }));
+
+    await Promise.all(
+      updates.map(({ _id, dependencies }) =>
+        Task.findByIdAndUpdate(
+          _id,
+          { dependencies },
+          { new: true, runValidators: true }
+        )
+      )
+    );
+
+    const finalTasks = await Task.find({
+      _id: { $in: createdTasks.map((task) => task._id) },
+    }).sort({ createdAt: 1 });
 
     return res.status(201).json({
       message: 'AI tasks generated successfully.',
-      tasks: createdTasks,
+      tasks: finalTasks,
     });
   } catch (error) {
     console.error('Generate AI tasks error:', error);
