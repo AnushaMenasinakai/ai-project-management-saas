@@ -31,15 +31,51 @@ exports.createTask = async (req, res) => {
       });
     }
 
-    const task = await Task.create({
-      title,
-      description,
-      project,
-      status,
-      priority,
-      dueDate,
-      assignedTo,
+   let validatedDependencies = [];
+
+if (dependencies !== undefined) {
+  if (!Array.isArray(dependencies)) {
+    return res.status(400).json({
+      message: 'Dependencies must be an array.',
     });
+  }
+
+  const invalidDependency = dependencies.find(
+    (dependencyId) => !mongoose.Types.ObjectId.isValid(dependencyId)
+  );
+
+  if (invalidDependency) {
+    return res.status(400).json({
+      message: 'All dependency IDs must be valid MongoDB ObjectIds.',
+    });
+  }
+
+  validatedDependencies = [
+    ...new Set(dependencies.map((dependencyId) => dependencyId.toString())),
+  ];
+
+  const dependencyTasks = await Task.find({
+    _id: { $in: validatedDependencies },
+    project,
+  }).select('_id');
+
+  if (dependencyTasks.length !== validatedDependencies.length) {
+    return res.status(400).json({
+      message: 'All dependencies must belong to the same project.',
+    });
+  }
+}
+
+const task = await Task.create({
+  title,
+  description,
+  project,
+  status,
+  priority,
+  dueDate,
+  assignedTo,
+  dependencies: validatedDependencies,
+});
 
     return res.status(201).json({
       message: 'Task created successfully.',
@@ -76,8 +112,10 @@ exports.getProjectTasks = async (req, res) => {
     }
 
     const tasks = await Task.find({
-      project: projectId,
-    }).sort({ createdAt: -1 });
+  project: projectId,
+})
+  .populate('dependencies', 'title')
+  .sort({ createdAt: -1 });
 
     return res.status(200).json({
       tasks,

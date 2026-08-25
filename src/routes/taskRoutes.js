@@ -8,7 +8,11 @@ const router = express.Router();
 router.post('/', authMiddleware, taskController.createTask);
 
 // Get all tasks for a project
-router.get('/project/:projectId', authMiddleware, taskController.getProjectTasks);
+router.get(
+  '/project/:projectId',
+  authMiddleware,
+  taskController.getProjectTasks
+);
 
 // Get one task
 router.get('/:id', authMiddleware, taskController.getTask);
