@@ -10,6 +10,9 @@ const ProjectDetails = () => {
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [tasksError, setTasksError] = useState('');
+  const [taskStatusFilter, setTaskStatusFilter] = useState('all');
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState('all');
+  const [taskSort, setTaskSort] = useState('created_desc');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
@@ -480,6 +483,53 @@ return (
 )}
     <h2>Tasks</h2>
 
+    <div>
+  <label htmlFor="task-status-filter">Filter by Status: </label>
+
+  <select
+    id="task-status-filter"
+    value={taskStatusFilter}
+    onChange={(event) => setTaskStatusFilter(event.target.value)}
+  >
+    <option value="all">All</option>
+    <option value="todo">Todo</option>
+    <option value="in_progress">In Progress</option>
+    <option value="completed">Completed</option>
+  </select>
+</div>
+
+<div>
+  <label htmlFor="task-priority-filter">Filter by Priority: </label>
+
+  <select
+    id="task-priority-filter"
+    value={taskPriorityFilter}
+    onChange={(event) => setTaskPriorityFilter(event.target.value)}
+  >
+    <option value="all">All</option>
+    <option value="low">Low</option>
+    <option value="medium">Medium</option>
+    <option value="high">High</option>
+  </select>
+</div>
+
+<div>
+  <label htmlFor="task-sort">Sort By: </label>
+
+  <select
+    id="task-sort"
+    value={taskSort}
+    onChange={(event) => setTaskSort(event.target.value)}
+  >
+    <option value="created_desc">Newest First</option>
+    <option value="created_asc">Oldest First</option>
+    <option value="due_asc">Due Date: Earliest First</option>
+    <option value="due_desc">Due Date: Latest First</option>
+    <option value="priority_high">Priority: High to Low</option>
+    <option value="priority_low">Priority: Low to High</option>
+  </select>
+</div>
+
 {tasksLoading && <p>Loading tasks...</p>}
 
 {tasksError && <p>{tasksError}</p>}
@@ -488,7 +538,64 @@ return (
   <p>No tasks yet.</p>
 )}
 
-{tasks.map((task) => (
+  {tasks
+  .filter((task) => {
+    const matchesStatus =
+      taskStatusFilter === 'all' ||
+      task.status === taskStatusFilter;
+
+    const matchesPriority =
+      taskPriorityFilter === 'all' ||
+      task.priority === taskPriorityFilter;
+
+    return matchesStatus && matchesPriority;
+  })
+  .sort((a, b) => {
+    if (taskSort === 'created_asc') {
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    }
+
+    if (taskSort === 'created_desc') {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    }
+
+    if (taskSort === 'due_asc') {
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+
+      return new Date(a.dueDate) - new Date(b.dueDate);
+    }
+
+    if (taskSort === 'due_desc') {
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+
+      return new Date(b.dueDate) - new Date(a.dueDate);
+    }
+
+    if (taskSort === 'priority_high') {
+      const priorityOrder = {
+        high: 3,
+        medium: 2,
+        low: 1,
+      };
+
+      return priorityOrder[b.priority] - priorityOrder[a.priority];
+    }
+
+    if (taskSort === 'priority_low') {
+      const priorityOrder = {
+        low: 1,
+        medium: 2,
+        high: 3,
+      };
+
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    }
+
+    return 0;
+  })
+  .map((task) => (
   <div key={task._id}>
     <h3>{task.title}</h3>
 
