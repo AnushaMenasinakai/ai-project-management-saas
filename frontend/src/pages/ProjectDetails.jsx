@@ -26,6 +26,7 @@ const ProjectDetails = () => {
   const [taskStatus, setTaskStatus] = useState('todo');
   const [taskPriority, setTaskPriority] = useState('medium');
   const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskAssignedTo, setTaskAssignedTo] = useState('');
   const [taskFormError, setTaskFormError] = useState(''); 
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
@@ -34,6 +35,7 @@ const ProjectDetails = () => {
   const [editTaskStatus, setEditTaskStatus] = useState('todo');
   const [editTaskPriority, setEditTaskPriority] = useState('medium');
   const [editTaskDueDate, setEditTaskDueDate] = useState('');
+  const [editTaskAssignedTo, setEditTaskAssignedTo] = useState('');
   const [updatingTask, setUpdatingTask] = useState(false);
   const [editTaskError, setEditTaskError] = useState(''); 
   const [editTaskDependencies, setEditTaskDependencies] = useState([]);
@@ -120,19 +122,21 @@ const handleCreateTask = async (event) => {
     setCreatingTask(true);
 
     await api.post('/tasks', {
-      title: taskTitle.trim(),
-      description: taskDescription.trim(),
-      project: id,
-      status: taskStatus,
-      priority: taskPriority,
-      dueDate: taskDueDate || undefined,
-    });
+  title: taskTitle.trim(),
+  description: taskDescription.trim(),
+  project: id,
+  status: taskStatus,
+  priority: taskPriority,
+  dueDate: taskDueDate || undefined,
+  assignedTo: taskAssignedTo || undefined,
+});
 
     setTaskTitle('');
     setTaskDescription('');
     setTaskStatus('todo');
     setTaskPriority('medium');
     setTaskDueDate('');
+    setTaskAssignedTo('');
     setCreatingTask(false);
     setShowTaskForm(false);
 
@@ -169,6 +173,7 @@ const handleUpdateTask = async (event) => {
   status: editTaskStatus,
   priority: editTaskPriority,
   dueDate: editTaskDueDate || undefined,
+  assignedTo: editTaskAssignedTo || undefined,
   dependencies: editTaskDependencies,
 });
 
@@ -493,6 +498,10 @@ return (
 
     <p>Status: {task.status}</p>
     <p>Priority: {task.priority}</p>
+    <p>
+  Assigned To:{' '}
+  {task.assignedTo?.name || 'Unassigned'}
+</p>
     {task.dependencies && task.dependencies.length > 0 && (
   <div>
     <p>Dependencies:</p>
@@ -527,6 +536,9 @@ return (
       ? new Date(task.dueDate).toISOString().split('T')[0]
       : ''
   );
+  setEditTaskAssignedTo(
+  task.assignedTo?._id || task.assignedTo || ''
+);
 
   setEditTaskDependencies(
     (task.dependencies || []).map((dependency) =>
@@ -627,6 +639,27 @@ return (
             }
           />
         </div>
+        <div>
+  <label htmlFor="edit-task-assigned-to">
+    Assign To
+  </label>
+
+  <select
+    id="edit-task-assigned-to"
+    value={editTaskAssignedTo}
+    onChange={(event) =>
+      setEditTaskAssignedTo(event.target.value)
+    }
+  >
+    <option value="">Unassigned</option>
+
+    {members.map((member) => (
+      <option key={member._id} value={member._id}>
+        {member.name} ({member.email})
+      </option>
+    ))}
+  </select>
+</div>
 
         <div>
   <label htmlFor="edit-task-dependencies">
@@ -671,6 +704,7 @@ return (
   setEditTaskError('');
   setDependencyError('');
   setEditTaskDependencies([]);
+  setEditTaskAssignedTo('');
 }}
         >
           Cancel
@@ -770,6 +804,24 @@ return (
         onChange={(event) => setTaskDueDate(event.target.value)}
       />
     </div>
+
+    <div>
+  <label htmlFor="task-assigned-to">Assign To</label>
+
+  <select
+    id="task-assigned-to"
+    value={taskAssignedTo}
+    onChange={(event) => setTaskAssignedTo(event.target.value)}
+  >
+    <option value="">Unassigned</option>
+
+    {members.map((member) => (
+      <option key={member._id} value={member._id}>
+        {member.name} ({member.email})
+      </option>
+    ))}
+  </select>
+</div>
 
     {taskFormError && <p>{taskFormError}</p>}
 

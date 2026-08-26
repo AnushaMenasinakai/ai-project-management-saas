@@ -45,6 +45,16 @@ exports.createTask = async (req, res) => {
       message: 'Assigned user not found.',
     });
   }
+
+  const isProjectMember = existingProject.members.some(
+    (memberId) => memberId.toString() === assignedTo.toString()
+  );
+
+  if (!isProjectMember) {
+    return res.status(403).json({
+      message: 'Assigned user must be a member of the project.',
+    });
+  }
 }
 
    let validatedDependencies = [];
@@ -130,8 +140,9 @@ exports.getProjectTasks = async (req, res) => {
     const tasks = await Task.find({
   project: projectId,
 })
-  .populate('dependencies', 'title')
-  .sort({ createdAt: -1 });
+.populate('dependencies', 'title')
+.populate('assignedTo', 'name email')
+.sort({ createdAt: -1 });
 
     return res.status(200).json({
       tasks,
@@ -231,7 +242,37 @@ exports.updateTask = async (req, res) => {
     if (status !== undefined) updates.status = status;
     if (priority !== undefined) updates.priority = priority;
     if (dueDate !== undefined) updates.dueDate = dueDate;
-    if (assignedTo !== undefined) updates.assignedTo = assignedTo;
+    if (assignedTo !== undefined) {
+  if (assignedTo === null || assignedTo === '') {
+    updates.assignedTo = undefined;
+  } else {
+    if (!mongoose.Types.ObjectId.isValid(assignedTo)) {
+      return res.status(400).json({
+        message: 'Invalid assigned user ID.',
+      });
+    }
+
+    const assignedUser = await User.findById(assignedTo);
+
+    if (!assignedUser) {
+      return res.status(404).json({
+        message: 'Assigned user not found.',
+      });
+    }
+
+    const isProjectMember = project.members.some(
+      (memberId) => memberId.toString() === assignedTo.toString()
+    );
+
+    if (!isProjectMember) {
+      return res.status(403).json({
+        message: 'Assigned user must be a member of the project.',
+      });
+    }
+
+    updates.assignedTo = assignedTo;
+  }
+}
     if (dependencies !== undefined) {
   if (!Array.isArray(dependencies)) {
     return res.status(400).json({
