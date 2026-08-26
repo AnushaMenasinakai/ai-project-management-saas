@@ -145,6 +145,11 @@ const Projects = () => {
     <p>{project.description}</p>
 
     <p>Status: {project.status}</p>
+    <p>Total Tasks: {project.totalTasks}</p>
+
+    <p>Completed Tasks: {project.completedTasks}</p>
+
+    <p>Progress: {project.progress}%</p>
 
     <button
       type="button"

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Project = require('../models/Project');
+const Task = require('../models/Task');
 
 const allowedUpdateFields = ['name', 'description', 'status', 'startDate', 'dueDate'];
 
@@ -37,12 +38,42 @@ const getProjects = async (req, res) => {
   try {
     const projects = await Project.find({ owner: req.user.id });
 
-    return res.status(200).json({ projects });
+    const projectsWithProgress = await Promise.all(
+      projects.map(async (project) => {
+        const totalTasks = await Task.countDocuments({
+          project: project._id,
+        });
+
+        const completedTasks = await Task.countDocuments({
+          project: project._id,
+          status: 'completed',
+        });
+
+        const progress =
+          totalTasks === 0
+            ? 0
+            : Math.round((completedTasks / totalTasks) * 100);
+
+        return {
+          ...project.toObject(),
+          totalTasks,
+          completedTasks,
+          progress,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      projects: projectsWithProgress,
+    });
   } catch (error) {
     console.error(`Unable to get projects: ${error.message}`);
-    return res.status(500).json({ message: 'Unable to retrieve projects.' });
+    return res.status(500).json({
+      message: 'Unable to retrieve projects.',
+    });
   }
 };
+   
 
 const getProjectById = async (req, res) => {
   try {
