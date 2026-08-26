@@ -4,9 +4,11 @@ const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
 const healthRoutes = require('./routes/healthRoutes');
 const projectRoutes = require('./routes/projectRoutes');
+const projectMemberRoutes = require('./routes/projectMemberRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const documentRoutes = require('./routes/documentRoutes');
 const aiRoutes = require('./routes/aiRoutes');
+
 
 const app = express();
 
@@ -21,6 +23,7 @@ app.use(
 app.use('/api/auth', authRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/projects', projectMemberRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api', aiRoutes);

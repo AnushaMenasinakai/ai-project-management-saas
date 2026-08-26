@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Task = require('../models/Task');
 const Project = require('../models/Project');
 const { hasCircularDependency } = require('../services/taskDependencyService');
+const User = require('../models/User');
 
 // Create a task
 exports.createTask = async (req, res) => {
@@ -30,6 +31,21 @@ exports.createTask = async (req, res) => {
         message: 'Project not found.',
       });
     }
+    if (assignedTo !== undefined) {
+  if (!mongoose.Types.ObjectId.isValid(assignedTo)) {
+    return res.status(400).json({
+      message: 'Invalid assigned user ID.',
+    });
+  }
+
+  const assignedUser = await User.findById(assignedTo);
+
+  if (!assignedUser) {
+    return res.status(404).json({
+      message: 'Assigned user not found.',
+    });
+  }
+}
 
    let validatedDependencies = [];
 
