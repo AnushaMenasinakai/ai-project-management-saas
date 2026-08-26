@@ -38,6 +38,14 @@ const ProjectDetails = () => {
   const [editTaskError, setEditTaskError] = useState(''); 
   const [editTaskDependencies, setEditTaskDependencies] = useState([]);
   const [dependencyError, setDependencyError] = useState('');
+  const [members, setMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [membersError, setMembersError] = useState('');
+  const [memberUserId, setMemberUserId] = useState('');
+  const [addingMember, setAddingMember] = useState(false);
+  const [addMemberError, setAddMemberError] = useState('');
+  const [removingMemberId, setRemovingMemberId] = useState(null);
+  const [removeMemberError, setRemoveMemberError] = useState('');
 
   const handleUpdateProject = async (event) => {
   event.preventDefault();
@@ -219,6 +227,85 @@ const handleDeleteTask = async (taskId) => {
   }
 };
 
+
+
+const fetchMembers = async () => {
+  try {
+    setMembersLoading(true);
+    setMembersError('');
+
+    const response = await api.get(`/projects/${id}/members`);
+
+    setMembers(response.data.members);
+  } catch (err) {
+    console.error('Fetch members error:', err);
+
+    setMembersError(
+      err.response?.data?.message || 'Failed to load project members.'
+    );
+  } finally {
+    setMembersLoading(false);
+  }
+};
+
+const handleAddMember = async (event) => {
+  event.preventDefault();
+
+  setAddMemberError('');
+
+  if (!memberUserId.trim()) {
+    setAddMemberError('User ID is required.');
+    return;
+  }
+
+  try {
+    setAddingMember(true);
+
+    await api.post(`/projects/${id}/members`, {
+      userId: memberUserId.trim(),
+    });
+
+    setMemberUserId('');
+
+    await fetchMembers();
+  } catch (err) {
+    console.error('Add member error:', err);
+
+    setAddMemberError(
+      err.response?.data?.message || 'Failed to add member.'
+    );
+  } finally {
+    setAddingMember(false);
+  }
+};
+
+const handleRemoveMember = async (userId) => {
+  const confirmed = window.confirm(
+    'Are you sure you want to remove this member from the project?'
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setRemovingMemberId(userId);
+    setRemoveMemberError('');
+
+    await api.delete(`/projects/${id}/members/${userId}`);
+
+    await fetchMembers();
+  } catch (err) {
+    console.error('Remove member error:', err);
+
+    setRemoveMemberError(
+      err.response?.data?.message || 'Failed to remove member.'
+    );
+  } finally {
+    setRemovingMemberId(null);
+  }
+};
+
   useEffect(() => {
     const fetchProject = async () => {
       try {
@@ -237,6 +324,7 @@ const handleDeleteTask = async (taskId) => {
 
     fetchProject();
     fetchTasks();
+    fetchMembers();
   }, [id]);
 
   if (loading) {
@@ -334,6 +422,57 @@ return (
     <p>{project.description || 'No description provided.'}</p>
 
     <p>Status: {project.status}</p>
+   <h2>Members</h2>
+
+<form onSubmit={handleAddMember}>
+  <div>
+    <label htmlFor="member-user-id">User ID</label>
+
+    <input
+      id="member-user-id"
+      type="text"
+      value={memberUserId}
+      onChange={(event) => setMemberUserId(event.target.value)}
+      placeholder="Enter user ID"
+    />
+  </div>
+
+  {addMemberError && <p>{addMemberError}</p>}
+
+  <button type="submit" disabled={addingMember}>
+    {addingMember ? 'Adding...' : 'Add Member'}
+  </button>
+</form>
+
+{removeMemberError && <p>{removeMemberError}</p>}
+
+{membersLoading && <p>Loading members...</p>}
+
+{membersError && <p>{membersError}</p>}
+
+{!membersLoading && !membersError && members.length === 0 && (
+  <p>No members yet.</p>
+)}
+
+{!membersLoading && !membersError && members.length > 0 && (
+  <ul>
+    {members.map((member) => (
+      <li key={member._id}>
+        <strong>{member.name}</strong> — {member.email}
+
+        <button
+          type="button"
+          onClick={() => handleRemoveMember(member._id)}
+          disabled={removingMemberId === member._id}
+        >
+          {removingMemberId === member._id
+            ? 'Removing...'
+            : 'Remove'}
+        </button>
+      </li>
+    ))}
+  </ul>
+)}
     <h2>Tasks</h2>
 
 {tasksLoading && <p>Loading tasks...</p>}
