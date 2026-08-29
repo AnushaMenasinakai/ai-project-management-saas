@@ -13,6 +13,7 @@ const ProjectDetails = () => {
   const [taskStatusFilter, setTaskStatusFilter] = useState('all');
   const [taskPriorityFilter, setTaskPriorityFilter] = useState('all');
   const [taskSort, setTaskSort] = useState('created_desc');
+  const [taskSearch, setTaskSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
@@ -360,6 +361,71 @@ const handleRemoveMember = async (userId) => {
       </div>
     );
   }
+  const filteredTasks = tasks
+  .filter((task) => {
+    const matchesStatus =
+      taskStatusFilter === 'all' ||
+      task.status === taskStatusFilter;
+
+    const matchesPriority =
+      taskPriorityFilter === 'all' ||
+      task.priority === taskPriorityFilter;
+
+    const searchTerm = taskSearch.trim().toLowerCase();
+
+    const matchesSearch =
+      !searchTerm ||
+      task.title.toLowerCase().includes(searchTerm) ||
+      (task.description || '').toLowerCase().includes(searchTerm);
+
+    return matchesStatus && matchesPriority && matchesSearch;
+  })
+  .sort((a, b) => {
+    if (taskSort === 'created_asc') {
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    }
+
+    if (taskSort === 'created_desc') {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    }
+
+    if (taskSort === 'due_asc') {
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+
+      return new Date(a.dueDate) - new Date(b.dueDate);
+    }
+
+    if (taskSort === 'due_desc') {
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+
+      return new Date(b.dueDate) - new Date(a.dueDate);
+    }
+
+    if (taskSort === 'priority_high') {
+      const priorityOrder = {
+        high: 3,
+        medium: 2,
+        low: 1,
+      };
+
+      return priorityOrder[b.priority] - priorityOrder[a.priority];
+    }
+
+    if (taskSort === 'priority_low') {
+      const priorityOrder = {
+        low: 1,
+        medium: 2,
+        high: 3,
+      };
+
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    }
+
+    return 0;
+  });
+
 
   if (editing) {
   return (
@@ -482,6 +548,17 @@ return (
   </ul>
 )}
     <h2>Tasks</h2>
+    <div>
+  <label htmlFor="task-search">Search Tasks: </label>
+
+  <input
+    id="task-search"
+    type="text"
+    value={taskSearch}
+    onChange={(event) => setTaskSearch(event.target.value)}
+    placeholder="Search by title or description"
+  />
+</div>
 
     <div>
   <label htmlFor="task-status-filter">Filter by Status: </label>
@@ -537,65 +614,13 @@ return (
 {!tasksLoading && !tasksError && tasks.length === 0 && (
   <p>No tasks yet.</p>
 )}
-
-  {tasks
-  .filter((task) => {
-    const matchesStatus =
-      taskStatusFilter === 'all' ||
-      task.status === taskStatusFilter;
-
-    const matchesPriority =
-      taskPriorityFilter === 'all' ||
-      task.priority === taskPriorityFilter;
-
-    return matchesStatus && matchesPriority;
-  })
-  .sort((a, b) => {
-    if (taskSort === 'created_asc') {
-      return new Date(a.createdAt) - new Date(b.createdAt);
-    }
-
-    if (taskSort === 'created_desc') {
-      return new Date(b.createdAt) - new Date(a.createdAt);
-    }
-
-    if (taskSort === 'due_asc') {
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-
-      return new Date(a.dueDate) - new Date(b.dueDate);
-    }
-
-    if (taskSort === 'due_desc') {
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-
-      return new Date(b.dueDate) - new Date(a.dueDate);
-    }
-
-    if (taskSort === 'priority_high') {
-      const priorityOrder = {
-        high: 3,
-        medium: 2,
-        low: 1,
-      };
-
-      return priorityOrder[b.priority] - priorityOrder[a.priority];
-    }
-
-    if (taskSort === 'priority_low') {
-      const priorityOrder = {
-        low: 1,
-        medium: 2,
-        high: 3,
-      };
-
-      return priorityOrder[a.priority] - priorityOrder[b.priority];
-    }
-
-    return 0;
-  })
-  .map((task) => (
+{!tasksLoading &&
+  !tasksError &&
+  tasks.length > 0 &&
+  filteredTasks.length === 0 && (
+    <p>No tasks match your current search and filters.</p>
+)}
+  {filteredTasks.map((task) => (
   <div key={task._id}>
     <h3>{task.title}</h3>
 
