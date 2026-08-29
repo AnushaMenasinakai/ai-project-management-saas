@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const Project = require('../models/Project');
 const Task = require('../models/Task');
+const Document = require('../models/Document');
+const DocumentChunk = require('../models/DocumentChunk');
 
 const allowedUpdateFields = ['name', 'description', 'status', 'startDate', 'dueDate'];
 
@@ -151,11 +153,16 @@ const deleteProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found.' });
     }
 
-    const project = await Project.findOneAndDelete({ _id: id, owner: req.user.id });
+    const project = await Project.findOne({ _id: id, owner: req.user.id });
 
     if (!project) {
       return res.status(404).json({ message: 'Project not found.' });
     }
+
+    await DocumentChunk.deleteMany({ project: project._id });
+    await Document.deleteMany({ project: project._id });
+    await Task.deleteMany({ project: project._id });
+    await Project.deleteOne({ _id: project._id, owner: req.user.id });
 
     return res.status(200).json({ message: 'Project deleted successfully.' });
   } catch (error) {
