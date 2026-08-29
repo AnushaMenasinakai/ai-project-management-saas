@@ -244,7 +244,7 @@ exports.updateTask = async (req, res) => {
     if (dueDate !== undefined) updates.dueDate = dueDate;
     if (assignedTo !== undefined) {
   if (assignedTo === null || assignedTo === '') {
-    updates.assignedTo = undefined;
+    updates.assignedTo = null;
   } else {
     if (!mongoose.Types.ObjectId.isValid(assignedTo)) {
       return res.status(400).json({

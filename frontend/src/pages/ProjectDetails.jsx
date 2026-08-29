@@ -176,8 +176,8 @@ const handleUpdateTask = async (event) => {
   description: editTaskDescription.trim(),
   status: editTaskStatus,
   priority: editTaskPriority,
-  dueDate: editTaskDueDate || undefined,
-  assignedTo: editTaskAssignedTo || undefined,
+  dueDate: editTaskDueDate || null,
+  assignedTo: editTaskAssignedTo || null,
   dependencies: editTaskDependencies,
 });
 
