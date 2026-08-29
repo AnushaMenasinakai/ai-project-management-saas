@@ -1,7 +1,8 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const { user, loading, logout } = useAuth();
 
   if (loading) {
@@ -19,6 +20,10 @@ const Dashboard = () => {
       <h2>Welcome, {user.name}!</h2>
 
       <p>Email: {user.email}</p>
+
+      <button type="button" onClick={() => navigate('/projects')}>
+        View Projects
+      </button>
 
       <button type="button" onClick={logout}>
         Logout
