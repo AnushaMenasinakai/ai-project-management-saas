@@ -376,6 +376,11 @@ exports.deleteTask = async (req, res) => {
       });
     }
 
+    await Task.updateMany(
+      { project: task.project, dependencies: task._id },
+      { $pull: { dependencies: task._id } }
+    );
+
     await Task.findByIdAndDelete(id);
 
     return res.status(200).json({
