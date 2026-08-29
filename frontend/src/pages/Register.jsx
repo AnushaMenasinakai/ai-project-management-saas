@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const Login = () => {
+const Register = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { register } = useAuth();
 
   const [form, setForm] = useState({
+    name: '',
     email: '',
     password: '',
   });
@@ -28,11 +29,12 @@ const Login = () => {
     setSubmitting(true);
 
     try {
-      await login(form.email, form.password);
-      navigate('/dashboard');
+      await register(form.name, form.email, form.password);
+      navigate('/login');
     } catch (error) {
       setError(
-        error.response?.data?.message || 'Login failed. Please try again.',
+        error.response?.data?.message ||
+          'Registration failed. Please try again.',
       );
     } finally {
       setSubmitting(false);
@@ -44,6 +46,18 @@ const Login = () => {
       <h1>AI Project Management SaaS</h1>
 
       <form onSubmit={handleSubmit}>
+        <div>
+          <label htmlFor="name">Name</label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            value={form.name}
+            onChange={handleChange}
+            required
+          />
+        </div>
+
         <div>
           <label htmlFor="email">Email</label>
           <input
@@ -64,6 +78,7 @@ const Login = () => {
             type="password"
             value={form.password}
             onChange={handleChange}
+            minLength={8}
             required
           />
         </div>
@@ -71,15 +86,15 @@ const Login = () => {
         {error && <p>{error}</p>}
 
         <button type="submit" disabled={submitting}>
-          {submitting ? 'Logging in...' : 'Login'}
+          {submitting ? 'Registering...' : 'Register'}
         </button>
       </form>
 
       <p>
-        Need an account? <Link to="/register">Register</Link>
+        Already have an account? <Link to="/login">Login</Link>
       </p>
     </main>
   );
 };
 
-export default Login;
+export default Register;
