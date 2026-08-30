@@ -6,7 +6,7 @@ const User = require('../models/User');
 exports.addMember = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId } = req.body;
+    const { email } = req.body;
 
     if (!mongoose.isValidObjectId(id)) {
       return res.status(404).json({
@@ -14,11 +14,13 @@ exports.addMember = async (req, res) => {
       });
     }
 
-    if (!mongoose.isValidObjectId(userId)) {
+    if (typeof email !== 'string' || !email.trim()) {
       return res.status(400).json({
-        message: 'Valid user ID is required.',
+        message: 'Member email is required.',
       });
     }
+
+    const normalizedEmail = email.trim().toLowerCase();
 
     const project = await Project.findOne({
       _id: id,
@@ -31,7 +33,7 @@ exports.addMember = async (req, res) => {
       });
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
       return res.status(404).json({
@@ -39,13 +41,19 @@ exports.addMember = async (req, res) => {
       });
     }
 
-    if (project.members.some((memberId) => memberId.toString() === userId)) {
+    if (project.owner.toString() === user._id.toString()) {
+      return res.status(400).json({
+        message: 'Project owner cannot be added as a member.',
+      });
+    }
+
+    if (project.members.some((memberId) => memberId.toString() === user._id.toString())) {
       return res.status(400).json({
         message: 'User is already a project member.',
       });
     }
 
-    project.members.push(userId);
+    project.members.push(user._id);
 
     await project.save();
 

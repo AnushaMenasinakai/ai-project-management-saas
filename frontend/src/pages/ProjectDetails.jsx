@@ -47,7 +47,7 @@ const ProjectDetails = () => {
   const [members, setMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState('');
-  const [memberUserId, setMemberUserId] = useState('');
+  const [memberEmail, setMemberEmail] = useState('');
   const [addingMember, setAddingMember] = useState(false);
   const [addMemberError, setAddMemberError] = useState('');
   const [removingMemberId, setRemovingMemberId] = useState(null);
@@ -262,8 +262,8 @@ const handleAddMember = async (event) => {
 
   setAddMemberError('');
 
-  if (!memberUserId.trim()) {
-    setAddMemberError('User ID is required.');
+  if (!memberEmail.trim()) {
+    setAddMemberError('Member email is required.');
     return;
   }
 
@@ -271,10 +271,10 @@ const handleAddMember = async (event) => {
     setAddingMember(true);
 
     await api.post(`/projects/${id}/members`, {
-      userId: memberUserId.trim(),
+      email: memberEmail.trim(),
     });
 
-    setMemberUserId('');
+    setMemberEmail('');
 
     await fetchMembers();
   } catch (err) {
@@ -500,14 +500,14 @@ return (
 
 <form onSubmit={handleAddMember}>
   <div>
-    <label htmlFor="member-user-id">User ID</label>
+    <label htmlFor="member-email">Member Email</label>
 
     <input
-      id="member-user-id"
-      type="text"
-      value={memberUserId}
-      onChange={(event) => setMemberUserId(event.target.value)}
-      placeholder="Enter user ID"
+      id="member-email"
+      type="email"
+      value={memberEmail}
+      onChange={(event) => setMemberEmail(event.target.value)}
+      placeholder="Enter member email"
     />
   </div>
 
