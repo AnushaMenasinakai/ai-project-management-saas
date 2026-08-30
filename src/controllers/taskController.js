@@ -128,7 +128,7 @@ exports.getProjectTasks = async (req, res) => {
 
     const project = await Project.findOne({
       _id: projectId,
-      owner: req.user.id,
+      $or: [{ owner: req.user.id }, { members: req.user.id }],
     });
 
     if (!project) {
@@ -176,7 +176,7 @@ exports.getTask = async (req, res) => {
 
     const project = await Project.findOne({
       _id: task.project,
-      owner: req.user.id,
+      $or: [{ owner: req.user.id }, { members: req.user.id }],
     });
 
     if (!project) {
