@@ -38,7 +38,9 @@ const createProject = async (req, res) => {
 
 const getProjects = async (req, res) => {
   try {
-    const projects = await Project.find({ owner: req.user.id });
+    const projects = await Project.find({
+      $or: [{ owner: req.user.id }, { members: req.user.id }],
+    });
 
     const projectsWithProgress = await Promise.all(
       projects.map(async (project) => {
@@ -85,7 +87,10 @@ const getProjectById = async (req, res) => {
       return res.status(404).json({ message: 'Project not found.' });
     }
 
-    const project = await Project.findOne({ _id: id, owner: req.user.id });
+    const project = await Project.findOne({
+      _id: id,
+      $or: [{ owner: req.user.id }, { members: req.user.id }],
+    });
 
     if (!project) {
       return res.status(404).json({ message: 'Project not found.' });
