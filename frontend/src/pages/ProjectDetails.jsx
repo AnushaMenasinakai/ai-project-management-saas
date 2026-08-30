@@ -52,6 +52,9 @@ const ProjectDetails = () => {
   const [addMemberError, setAddMemberError] = useState('');
   const [removingMemberId, setRemovingMemberId] = useState(null);
   const [removeMemberError, setRemoveMemberError] = useState('');
+  const [documents, setDocuments] = useState([]);
+  const [documentsLoading, setDocumentsLoading] = useState(true);
+  const [documentsError, setDocumentsError] = useState('');
 
   const handleUpdateProject = async (event) => {
   event.preventDefault();
@@ -331,9 +334,29 @@ const handleRemoveMember = async (userId) => {
       }
     };
 
+    const fetchDocuments = async () => {
+      try {
+        setDocumentsLoading(true);
+        setDocumentsError('');
+
+        const response = await api.get(`/documents/project/${id}`);
+
+        setDocuments(response.data.documents);
+      } catch (err) {
+        console.error('Fetch documents error:', err);
+
+        setDocumentsError(
+          err.response?.data?.message || 'Failed to load documents.'
+        );
+      } finally {
+        setDocumentsLoading(false);
+      }
+    };
+
     fetchProject();
     fetchTasks();
     fetchMembers();
+    fetchDocuments();
   }, [id]);
 
   if (loading) {
@@ -543,6 +566,26 @@ return (
             ? 'Removing...'
             : 'Remove'}
         </button>
+      </li>
+    ))}
+  </ul>
+)}
+    <h2>Documents</h2>
+
+{documentsLoading && <p>Loading documents...</p>}
+
+{documentsError && <p>{documentsError}</p>}
+
+{!documentsLoading && !documentsError && documents.length === 0 && (
+  <p>No documents yet.</p>
+)}
+
+{!documentsLoading && !documentsError && documents.length > 0 && (
+  <ul>
+    {documents.map((document) => (
+      <li key={document._id}>
+        <strong>{document.title}</strong>
+        {document.sourceType && <> — Source: {document.sourceType}</>}
       </li>
     ))}
   </ul>
