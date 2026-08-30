@@ -23,7 +23,7 @@ exports.createTask = async (req, res) => {
 
     const existingProject = await Project.findOne({
       _id: project,
-      owner: req.user.id,
+      $or: [{ owner: req.user.id }, { members: req.user.id }],
     });
 
     if (!existingProject) {
