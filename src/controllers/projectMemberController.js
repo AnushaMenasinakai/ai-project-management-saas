@@ -83,7 +83,7 @@ exports.getMembers = async (req, res) => {
 
     const project = await Project.findOne({
       _id: id,
-      owner: req.user.id,
+      $or: [{ owner: req.user.id }, { members: req.user.id }],
     }).populate('members', 'name email');
 
     if (!project) {
