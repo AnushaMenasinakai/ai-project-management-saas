@@ -16,6 +16,9 @@ const ProjectDetails = () => {
   const [taskPriorityFilter, setTaskPriorityFilter] = useState('all');
   const [taskSort, setTaskSort] = useState('created_desc');
   const [taskSearch, setTaskSearch] = useState('');
+  const [generatingTasks, setGeneratingTasks] = useState(false);
+  const [generateTasksError, setGenerateTasksError] = useState('');
+  const [generateTasksSuccess, setGenerateTasksSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
@@ -254,6 +257,40 @@ const handleDeleteTask = async (taskId) => {
     );
   } finally {
     setTasksLoading(false);
+  }
+};
+
+const handleGenerateTasks = async () => {
+  if (generatingTasks) {
+    return;
+  }
+
+  try {
+    setGeneratingTasks(true);
+    setGenerateTasksError('');
+    setGenerateTasksSuccess('');
+
+    const response = await api.post(`/projects/${id}/ai/generate-tasks`);
+    const generatedTaskCount = Array.isArray(response.data.tasks)
+      ? response.data.tasks.length
+      : 0;
+
+    await fetchTasks();
+
+    setGenerateTasksSuccess(
+      generatedTaskCount > 0
+        ? `${generatedTaskCount} AI tasks generated successfully.`
+        : 'AI tasks generated successfully.'
+    );
+  } catch (err) {
+    console.error('Generate AI tasks error:', err);
+
+    setGenerateTasksSuccess('');
+    setGenerateTasksError(
+      err.response?.data?.message || 'Failed to generate AI tasks.'
+    );
+  } finally {
+    setGeneratingTasks(false);
   }
 };
 
@@ -982,6 +1019,18 @@ return (
       )}
     </section>
     <h2>Tasks</h2>
+    <div>
+      <button
+        type="button"
+        onClick={handleGenerateTasks}
+        disabled={generatingTasks}
+      >
+        {generatingTasks ? 'Generating Tasks...' : 'Generate Tasks with AI'}
+      </button>
+
+      {generateTasksError && <p>{generateTasksError}</p>}
+      {generateTasksSuccess && <p>{generateTasksSuccess}</p>}
+    </div>
     <div>
   <label htmlFor="task-search">Search Tasks: </label>
 
