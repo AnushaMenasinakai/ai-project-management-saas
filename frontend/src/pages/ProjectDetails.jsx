@@ -1019,7 +1019,15 @@ return (
       )}
     </section>
     <h2>Tasks</h2>
-    <div>
+    <section
+      className="ai-task-generation"
+      aria-labelledby="ai-task-generation-heading"
+    >
+      <h3 id="ai-task-generation-heading">AI Task Generation</h3>
+      <p className="ai-task-generation__description">
+        Generate a set of tasks from this project's name and description.
+      </p>
+
       <button
         type="button"
         onClick={handleGenerateTasks}
@@ -1028,9 +1036,26 @@ return (
         {generatingTasks ? 'Generating Tasks...' : 'Generate Tasks with AI'}
       </button>
 
-      {generateTasksError && <p>{generateTasksError}</p>}
-      {generateTasksSuccess && <p>{generateTasksSuccess}</p>}
-    </div>
+      <p className="ai-task-generation__note">
+        Running AI generation again will create another set of tasks.
+      </p>
+
+      {generatingTasks && (
+        <p className="ai-task-generation__status" role="status">
+          AI is generating and organizing tasks for this project...
+        </p>
+      )}
+      {generateTasksError && (
+        <p className="ai-task-generation__error" role="alert">
+          {generateTasksError}
+        </p>
+      )}
+      {generateTasksSuccess && (
+        <p className="ai-task-generation__success" role="status">
+          {generateTasksSuccess}
+        </p>
+      )}
+    </section>
     <div>
   <label htmlFor="task-search">Search Tasks: </label>
 
