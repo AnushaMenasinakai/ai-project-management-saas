@@ -68,6 +68,11 @@ const ProjectDetails = () => {
   const [editDocumentError, setEditDocumentError] = useState('');
   const [deletingDocumentId, setDeletingDocumentId] = useState(null);
   const [deleteDocumentError, setDeleteDocumentError] = useState('');
+  const [ragQuestion, setRagQuestion] = useState('');
+  const [ragAnswer, setRagAnswer] = useState('');
+  const [ragSources, setRagSources] = useState([]);
+  const [ragLoading, setRagLoading] = useState(false);
+  const [ragError, setRagError] = useState('');
 
   const handleUpdateProject = async (event) => {
   event.preventDefault();
@@ -423,6 +428,43 @@ const handleDeleteDocument = async (documentId) => {
     );
   } finally {
     setDeletingDocumentId(null);
+  }
+};
+
+const handleAskProject = async (event) => {
+  event.preventDefault();
+
+  if (ragLoading) {
+    return;
+  }
+
+  const trimmedQuestion = ragQuestion.trim();
+
+  if (!trimmedQuestion) {
+    setRagError('Please enter a question.');
+    return;
+  }
+
+  try {
+    setRagLoading(true);
+    setRagError('');
+
+    const response = await api.post(`/projects/${id}/ask`, {
+      question: trimmedQuestion,
+    });
+
+    setRagAnswer(response.data.answer);
+    setRagSources(
+      Array.isArray(response.data.sources) ? response.data.sources : []
+    );
+  } catch (err) {
+    console.error('Ask project error:', err);
+
+    setRagError(
+      err.response?.data?.message || 'Failed to generate an answer.'
+    );
+  } finally {
+    setRagLoading(false);
   }
 };
 
@@ -877,6 +919,52 @@ return (
             </li>
           ))}
         </ul>
+      )}
+    </section>
+    <section className="project-qa-section" aria-labelledby="project-qa-heading">
+      <h2 id="project-qa-heading">Project Q&amp;A</h2>
+
+      <form className="project-qa-form" onSubmit={handleAskProject}>
+        <div className="project-qa-field">
+          <label htmlFor="project-question">Ask about this project</label>
+          <textarea
+            id="project-question"
+            value={ragQuestion}
+            onChange={(event) => setRagQuestion(event.target.value)}
+            placeholder="Ask a question about the project documents"
+            rows={3}
+          />
+        </div>
+
+        {ragError && <p className="project-qa-error">{ragError}</p>}
+
+        <button type="submit" disabled={ragLoading}>
+          {ragLoading ? 'Asking...' : 'Ask AI'}
+        </button>
+      </form>
+
+      {ragAnswer && (
+        <div className="project-qa-answer">
+          <h3>Answer</h3>
+          <p>{ragAnswer}</p>
+        </div>
+      )}
+
+      {ragSources.length > 0 && (
+        <div className="project-qa-sources">
+          <h3>Sources</h3>
+          <ul>
+            {ragSources.map((source, index) => (
+              <li key={source.chunkId || index}>
+                {source.title && <strong>{source.title}</strong>}
+                {typeof source.score === 'number' && (
+                  <span>Score: {source.score.toFixed(3)}</span>
+                )}
+                {source.content && <p>{source.content}</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
     <h2>Tasks</h2>
