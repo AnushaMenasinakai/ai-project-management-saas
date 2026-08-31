@@ -164,10 +164,21 @@ const deleteProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found.' });
     }
 
-    await DocumentChunk.deleteMany({ project: project._id });
-    await Document.deleteMany({ project: project._id });
-    await Task.deleteMany({ project: project._id });
-    await Project.deleteOne({ _id: project._id, owner: req.user.id });
+    const session = await mongoose.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        await DocumentChunk.deleteMany({ project: project._id }, { session });
+        await Document.deleteMany({ project: project._id }, { session });
+        await Task.deleteMany({ project: project._id }, { session });
+        await Project.deleteOne(
+          { _id: project._id, owner: req.user.id },
+          { session }
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
 
     return res.status(200).json({ message: 'Project deleted successfully.' });
   } catch (error) {
