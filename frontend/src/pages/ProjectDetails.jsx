@@ -597,16 +597,6 @@ const handleRemoveMember = async (userId) => {
     return (
       <div>
         <p>{error}</p>
-        {deleteError && <p>{deleteError}</p>}
-
-<button
-  type="button"
-  onClick={handleDeleteProject}
-  disabled={deleting}
->
-  {deleting ? 'Deleting...' : 'Delete Project'}
-</button>
-
 
         <button type="button" onClick={() => navigate('/projects')}>
           Back to Projects
@@ -688,7 +678,7 @@ const handleRemoveMember = async (userId) => {
   });
 
 
-  if (editing) {
+  if (editing && isProjectOwner) {
   return (
     <div>
       <h1>Edit Project</h1>
@@ -759,6 +749,7 @@ return (
     <p>Status: {project.status}</p>
    <h2>Members</h2>
 
+{isProjectOwner && (
 <form onSubmit={handleAddMember}>
   <div>
     <label htmlFor="member-email">Member Email</label>
@@ -778,8 +769,9 @@ return (
     {addingMember ? 'Adding...' : 'Add Member'}
   </button>
 </form>
+)}
 
-{removeMemberError && <p>{removeMemberError}</p>}
+{isProjectOwner && removeMemberError && <p>{removeMemberError}</p>}
 
 {membersLoading && <p>Loading members...</p>}
 
@@ -795,15 +787,17 @@ return (
       <li key={member._id}>
         <strong>{member.name}</strong> — {member.email}
 
-        <button
-          type="button"
-          onClick={() => handleRemoveMember(member._id)}
-          disabled={removingMemberId === member._id}
-        >
-          {removingMemberId === member._id
-            ? 'Removing...'
-            : 'Remove'}
-        </button>
+        {isProjectOwner && (
+          <button
+            type="button"
+            onClick={() => handleRemoveMember(member._id)}
+            disabled={removingMemberId === member._id}
+          >
+            {removingMemberId === member._id
+              ? 'Removing...'
+              : 'Remove'}
+          </button>
+        )}
       </li>
     ))}
   </ul>
@@ -1354,20 +1348,22 @@ return (
   </div>
 ))}
 
-    {deleteError && <p>{deleteError}</p>}
+    {isProjectOwner && deleteError && <p>{deleteError}</p>}
 
-    <button
-      type="button"
-      onClick={() => {
-        setName(project.name);
-        setDescription(project.description || '');
-        setStatus(project.status);
-        setFormError('');
-        setEditing(true);
-      }}
-    >
-      Edit Project
-    </button>
+    {isProjectOwner && (
+      <button
+        type="button"
+        onClick={() => {
+          setName(project.name);
+          setDescription(project.description || '');
+          setStatus(project.status);
+          setFormError('');
+          setEditing(true);
+        }}
+      >
+        Edit Project
+      </button>
+    )}
 
    <button
   type="button"
@@ -1481,13 +1477,15 @@ return (
   </form>
 )}
 
-    <button
-      type="button"
-      onClick={handleDeleteProject}
-      disabled={deleting}
-    >
-      {deleting ? 'Deleting...' : 'Delete Project'}
-    </button>
+    {isProjectOwner && (
+      <button
+        type="button"
+        onClick={handleDeleteProject}
+        disabled={deleting}
+      >
+        {deleting ? 'Deleting...' : 'Delete Project'}
+      </button>
+    )}
 
     <button
       type="button"

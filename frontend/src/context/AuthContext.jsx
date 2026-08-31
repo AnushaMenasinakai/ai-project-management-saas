@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import api from '../services/api';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import api, { setAuthFailureHandler } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -33,11 +33,15 @@ export const AuthProvider = ({ children }) => {
     return response.data;
   };
 
-  const logout = () => {
+  const clearAuth = useCallback(() => {
     localStorage.removeItem('token');
     setToken(null);
     setUser(null);
-  };
+  }, []);
+
+  const logout = clearAuth;
+
+  useEffect(() => setAuthFailureHandler(clearAuth), [clearAuth]);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -55,16 +59,16 @@ export const AuthProvider = ({ children }) => {
 
         setUser(response.data.user);
       } catch (error) {
-        localStorage.removeItem('token');
-        setToken(null);
-        setUser(null);
+        if (error.response?.status === 401) {
+          clearAuth();
+        }
       } finally {
         setLoading(false);
       }
     };
 
     loadUser();
-  }, [token]);
+  }, [token, clearAuth]);
 
   return (
     <AuthContext.Provider

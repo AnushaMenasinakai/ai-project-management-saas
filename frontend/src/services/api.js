@@ -9,6 +9,18 @@ const api = axios.create({
   },
 });
 
+let authFailureHandler = null;
+
+export const setAuthFailureHandler = (handler) => {
+  authFailureHandler = handler;
+
+  return () => {
+    if (authFailureHandler === handler) {
+      authFailureHandler = null;
+    }
+  };
+};
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
 
@@ -18,5 +30,19 @@ api.interceptors.request.use((config) => {
 
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const storedToken = localStorage.getItem('token');
+
+    if (error.response?.status === 401 && storedToken) {
+      localStorage.removeItem('token');
+      authFailureHandler?.();
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 export default api;
