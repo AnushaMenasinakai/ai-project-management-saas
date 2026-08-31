@@ -218,39 +218,59 @@ exports.updateDocument = async (req, res) => {
       updates.sourceType = sourceType;
     }
 
-    const updatedDocument = await Document.findByIdAndUpdate(
-      id,
-      updates,
-      {
-        new: true,
-        runValidators: true,
+    let updatedDocument;
+
+    if (content === undefined) {
+      updatedDocument = await Document.findByIdAndUpdate(
+        id,
+        updates,
+        {
+          new: true,
+          runValidators: true,
+        }
+      );
+    } else {
+      const chunks = chunkText(content);
+      const chunkDocuments = [];
+
+      for (let index = 0; index < chunks.length; index += 1) {
+        const chunkContent = chunks[index];
+        const embedding = await generateEmbedding(chunkContent);
+
+        chunkDocuments.push({
+          document: document._id,
+          project: document.project,
+          content: chunkContent,
+          chunkIndex: index,
+          embedding,
+        });
       }
-    );
-// Replace chunks when document content changes
-    if (content !== undefined) {
-  await DocumentChunk.deleteMany({
-    document: id,
-  });
 
-  const chunks = chunkText(updatedDocument.content);
+      const session = await mongoose.startSession();
 
-const chunkDocuments = [];
+      try {
+        await session.withTransaction(async () => {
+          updatedDocument = await Document.findByIdAndUpdate(
+            id,
+            updates,
+            {
+              new: true,
+              runValidators: true,
+              session,
+            }
+          );
 
-for (let index = 0; index < chunks.length; index += 1) {
-  const content = chunks[index];
-  const embedding = await generateEmbedding(content);
+          await DocumentChunk.deleteMany(
+            { document: id },
+            { session }
+          );
 
-  chunkDocuments.push({
-    document: document._id,
-    project: document.project,
-    content,
-    chunkIndex: index,
-    embedding,
-  });
-}
-
-await DocumentChunk.insertMany(chunkDocuments);
-}
+          await DocumentChunk.insertMany(chunkDocuments, { session });
+        });
+      } finally {
+        await session.endSession();
+      }
+    }
 
     return res.status(200).json({
       message: 'Document updated successfully.',
