@@ -39,34 +39,48 @@ exports.createDocument = async (req, res) => {
       });
     }
 
-    const document = await Document.create({
-      title,
-      content,
-      project,
-      uploadedBy: req.user.id,
-      sourceType,
-    });
-
     // Split document content into chunks
-const chunks = chunkText(document.content);
+    const chunks = chunkText(content);
 
-const chunkDocuments = [];
+    const preparedChunks = [];
 
-for (let index = 0; index < chunks.length; index += 1) {
-  const content = chunks[index];
-  const embedding = await generateEmbedding(content);
+    for (let index = 0; index < chunks.length; index += 1) {
+      const chunkContent = chunks[index];
+      const embedding = await generateEmbedding(chunkContent);
 
-  chunkDocuments.push({
-    document: document._id,
-    project: document.project,
-    content,
-    chunkIndex: index,
-    embedding,
-  });
-}
+      preparedChunks.push({
+        content: chunkContent,
+        chunkIndex: index,
+        embedding,
+      });
+    }
 
-await DocumentChunk.insertMany(chunkDocuments);
+    const session = await mongoose.startSession();
+    let document;
 
+    try {
+      await session.withTransaction(async () => {
+        document = new Document({
+          title,
+          content,
+          project,
+          uploadedBy: req.user.id,
+          sourceType,
+        });
+
+        await document.save({ session });
+
+        const chunkDocuments = preparedChunks.map((chunk) => ({
+          document: document._id,
+          project: document.project,
+          ...chunk,
+        }));
+
+        await DocumentChunk.insertMany(chunkDocuments, { session });
+      });
+    } finally {
+      await session.endSession();
+    }
 
     return res.status(201).json({
       message: 'Document created successfully.',
