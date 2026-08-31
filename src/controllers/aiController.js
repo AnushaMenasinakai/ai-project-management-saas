@@ -14,7 +14,7 @@ exports.askProject = async (req, res) => {
       });
     }
 
-    if (!question || !question.trim()) {
+    if (typeof question !== 'string' || !question.trim()) {
       return res.status(400).json({
         message: 'Question is required.',
       });
@@ -22,7 +22,7 @@ exports.askProject = async (req, res) => {
 
     const project = await Project.findOne({
       _id: projectId,
-      owner: req.user.id,
+      $or: [{ owner: req.user.id }, { members: req.user.id }],
     });
 
     if (!project) {
