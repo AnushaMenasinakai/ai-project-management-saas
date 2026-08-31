@@ -1,10 +1,9 @@
 const { GoogleGenAI } = require('@google/genai');
+const config = require('../config/env');
 
 const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+  apiKey: config.geminiApiKey,
 });
-
-const embeddingModel = process.env.EMBEDDING_MODEL;
 
 const generateEmbedding = async (text) => {
   if (!text || !text.trim()) {
@@ -12,7 +11,7 @@ const generateEmbedding = async (text) => {
   }
 
   const response = await ai.models.embedContent({
-    model: embeddingModel,
+    model: config.embeddingModel,
     contents: text,
   });
 

@@ -1,7 +1,8 @@
 const { GoogleGenAI } = require('@google/genai');
+const config = require('../config/env');
 
 const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+  apiKey: config.geminiApiKey,
 });
 
 const allowedPriorities = ['low', 'medium', 'high'];
@@ -159,7 +160,7 @@ Return JSON only, with no markdown or explanation, in exactly this shape:
 `;
 
   const response = await ai.models.generateContent({
-    model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
+    model: config.geminiModel,
     contents: prompt,
     config: {
       responseMimeType: 'application/json',

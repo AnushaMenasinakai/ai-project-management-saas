@@ -1,9 +1,10 @@
 const { GoogleGenAI } = require('@google/genai');
 const { searchSimilarChunks } = require('./vectorSearchService');
 const Document = require('../models/Document');
+const config = require('../config/env');
 
 const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+  apiKey: config.geminiApiKey,
 });
 
 const generateRagAnswer = async (question, projectId) => {
@@ -45,7 +46,7 @@ Provide a clear and concise answer.
 `;
 
   const response = await ai.models.generateContent({
-    model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
+    model: config.geminiModel,
     contents: prompt,
   });
 
