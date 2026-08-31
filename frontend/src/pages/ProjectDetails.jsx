@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 
@@ -55,6 +55,10 @@ const ProjectDetails = () => {
   const [documents, setDocuments] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(true);
   const [documentsError, setDocumentsError] = useState('');
+  const [documentTitle, setDocumentTitle] = useState('');
+  const [documentContent, setDocumentContent] = useState('');
+  const [creatingDocument, setCreatingDocument] = useState(false);
+  const [createDocumentError, setCreateDocumentError] = useState('');
 
   const handleUpdateProject = async (event) => {
   event.preventDefault();
@@ -260,6 +264,65 @@ const fetchMembers = async () => {
   }
 };
 
+const fetchDocuments = useCallback(async () => {
+  try {
+    setDocumentsLoading(true);
+    setDocumentsError('');
+
+    const response = await api.get(`/documents/project/${id}`);
+
+    setDocuments(response.data.documents);
+  } catch (err) {
+    console.error('Fetch documents error:', err);
+
+    setDocumentsError(
+      err.response?.data?.message || 'Failed to load documents.'
+    );
+  } finally {
+    setDocumentsLoading(false);
+  }
+}, [id]);
+
+const handleCreateDocument = async (event) => {
+  event.preventDefault();
+
+  setCreateDocumentError('');
+
+  if (!documentTitle.trim()) {
+    setCreateDocumentError('Document title is required.');
+    return;
+  }
+
+  if (!documentContent.trim()) {
+    setCreateDocumentError('Document content is required.');
+    return;
+  }
+
+  try {
+    setCreatingDocument(true);
+
+    await api.post('/documents', {
+      title: documentTitle.trim(),
+      content: documentContent.trim(),
+      project: id,
+      sourceType: 'text',
+    });
+
+    setDocumentTitle('');
+    setDocumentContent('');
+
+    await fetchDocuments();
+  } catch (err) {
+    console.error('Create document error:', err);
+
+    setCreateDocumentError(
+      err.response?.data?.message || 'Failed to create document.'
+    );
+  } finally {
+    setCreatingDocument(false);
+  }
+};
+
 const handleAddMember = async (event) => {
   event.preventDefault();
 
@@ -334,30 +397,11 @@ const handleRemoveMember = async (userId) => {
       }
     };
 
-    const fetchDocuments = async () => {
-      try {
-        setDocumentsLoading(true);
-        setDocumentsError('');
-
-        const response = await api.get(`/documents/project/${id}`);
-
-        setDocuments(response.data.documents);
-      } catch (err) {
-        console.error('Fetch documents error:', err);
-
-        setDocumentsError(
-          err.response?.data?.message || 'Failed to load documents.'
-        );
-      } finally {
-        setDocumentsLoading(false);
-      }
-    };
-
     fetchProject();
     fetchTasks();
     fetchMembers();
     fetchDocuments();
-  }, [id]);
+  }, [id, fetchDocuments]);
 
   if (loading) {
     return <p>Loading project...</p>;
@@ -571,6 +615,37 @@ return (
   </ul>
 )}
     <h2>Documents</h2>
+
+<form onSubmit={handleCreateDocument}>
+  <h3>Create Document</h3>
+
+  <div>
+    <label htmlFor="document-title">Title</label>
+    <input
+      id="document-title"
+      type="text"
+      value={documentTitle}
+      onChange={(event) => setDocumentTitle(event.target.value)}
+      placeholder="Enter document title"
+    />
+  </div>
+
+  <div>
+    <label htmlFor="document-content">Content</label>
+    <textarea
+      id="document-content"
+      value={documentContent}
+      onChange={(event) => setDocumentContent(event.target.value)}
+      placeholder="Enter document content"
+    />
+  </div>
+
+  {createDocumentError && <p>{createDocumentError}</p>}
+
+  <button type="submit" disabled={creatingDocument}>
+    {creatingDocument ? 'Creating...' : 'Create Document'}
+  </button>
+</form>
 
 {documentsLoading && <p>Loading documents...</p>}
 
