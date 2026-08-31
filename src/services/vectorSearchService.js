@@ -7,11 +7,15 @@ const searchSimilarChunks = async (query, projectId, limit = 5) => {
     throw new Error('Search query is required.');
   }
 
-  const queryEmbedding = await generateEmbedding(query);
-
   const chunks = await DocumentChunk.find({
     project: projectId,
   });
+
+  if (chunks.length === 0) {
+    return [];
+  }
+
+  const queryEmbedding = await generateEmbedding(query);
 
   const scoredChunks = chunks.map((chunk) => ({
     chunk,
