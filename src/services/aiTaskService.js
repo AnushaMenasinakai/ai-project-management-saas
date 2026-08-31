@@ -86,6 +86,38 @@ const validateGeneratedTasks = (result) => {
     });
   });
 
+  const dependenciesByTask = new Map(
+    result.tasks.map((task) => [task.id, task.dependsOn])
+  );
+  const visiting = new Set();
+  const visited = new Set();
+
+  const hasCycle = (taskId) => {
+    if (visiting.has(taskId)) {
+      return true;
+    }
+
+    if (visited.has(taskId)) {
+      return false;
+    }
+
+    visiting.add(taskId);
+
+    for (const dependencyId of dependenciesByTask.get(taskId)) {
+      if (hasCycle(dependencyId)) {
+        return true;
+      }
+    }
+
+    visiting.delete(taskId);
+    visited.add(taskId);
+    return false;
+  };
+
+  if (result.tasks.some((task) => hasCycle(task.id))) {
+    throw new Error('AI task dependencies cannot contain a cycle.');
+  }
+
   return result;
 };
 

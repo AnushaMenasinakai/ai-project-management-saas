@@ -38,42 +38,50 @@ exports.generateTasks = async (req, res) => {
       dueDate: task.dueDate,
     }));
 
-    const createdTasks = await Task.insertMany(taskDocuments);
+    const session = await mongoose.startSession();
+    let finalTasks;
 
-    const taskIdMap = new Map();
+    try {
+      await session.withTransaction(async () => {
+        const createdTasks = await Task.insertMany(taskDocuments, { session });
+        const taskIdMap = new Map();
 
-    tasks.forEach((task, index) => {
-      taskIdMap.set(task.id, createdTasks[index]._id);
-    });
+        tasks.forEach((task, index) => {
+          taskIdMap.set(task.id, createdTasks[index]._id);
+        });
 
-    const updates = createdTasks.map((createdTask, index) => ({
-      _id: createdTask._id,
-      dependencies: tasks[index].dependsOn.map((dependencyId) => {
-        const dependencyObjectId = taskIdMap.get(dependencyId);
+        const updates = createdTasks.map((createdTask, index) => ({
+          _id: createdTask._id,
+          dependencies: tasks[index].dependsOn.map((dependencyId) => {
+            const dependencyObjectId = taskIdMap.get(dependencyId);
 
-        if (!dependencyObjectId) {
-          throw new Error(
-            `Could not resolve dependency ${dependencyId}.`
+            if (!dependencyObjectId) {
+              throw new Error(
+                `Could not resolve dependency ${dependencyId}.`
+              );
+            }
+
+            return dependencyObjectId;
+          }),
+        }));
+
+        for (const { _id, dependencies } of updates) {
+          await Task.findByIdAndUpdate(
+            _id,
+            { dependencies },
+            { new: true, runValidators: true, session }
           );
         }
 
-        return dependencyObjectId;
-      }),
-    }));
-
-    await Promise.all(
-      updates.map(({ _id, dependencies }) =>
-        Task.findByIdAndUpdate(
-          _id,
-          { dependencies },
-          { new: true, runValidators: true }
-        )
-      )
-    );
-
-    const finalTasks = await Task.find({
-      _id: { $in: createdTasks.map((task) => task._id) },
-    }).sort({ createdAt: 1 });
+        finalTasks = await Task.find({
+          _id: { $in: createdTasks.map((task) => task._id) },
+        })
+          .sort({ createdAt: 1 })
+          .session(session);
+      });
+    } finally {
+      await session.endSession();
+    }
 
     return res.status(201).json({
       message: 'AI tasks generated successfully.',
