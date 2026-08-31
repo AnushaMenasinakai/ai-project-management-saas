@@ -332,6 +332,13 @@ const handleCreateDocument = async (event) => {
   }
 };
 
+const resetDocumentEdit = () => {
+  setEditingDocumentId(null);
+  setEditDocumentTitle('');
+  setEditDocumentContent('');
+  setEditDocumentError('');
+};
+
 const handleUpdateDocument = async (event) => {
   event.preventDefault();
 
@@ -361,7 +368,7 @@ const handleUpdateDocument = async (event) => {
   }
 
   if (Object.keys(updates).length === 0) {
-    setEditingDocumentId(null);
+    resetDocumentEdit();
     return;
   }
 
@@ -370,7 +377,7 @@ const handleUpdateDocument = async (event) => {
 
     await api.patch(`/documents/${editingDocumentId}`, updates);
 
-    setEditingDocumentId(null);
+    resetDocumentEdit();
 
     await fetchDocuments();
   } catch (err) {
@@ -402,6 +409,10 @@ const handleDeleteDocument = async (documentId) => {
     setDeleteDocumentError('');
 
     await api.delete(`/documents/${documentId}`);
+
+    if (editingDocumentId === documentId) {
+      resetDocumentEdit();
+    }
 
     await fetchDocuments();
   } catch (err) {
@@ -526,6 +537,8 @@ const handleRemoveMember = async (userId) => {
     projectOwnerId &&
     user.id.toString() === projectOwnerId.toString()
   );
+  const documentMutationInProgress =
+    creatingDocument || savingDocument || deletingDocumentId !== null;
   const filteredTasks = tasks
   .filter((task) => {
     const matchesStatus =
@@ -712,136 +725,160 @@ return (
     ))}
   </ul>
 )}
-    <h2>Documents</h2>
+    <section className="documents-section" aria-labelledby="documents-heading">
+      <div className="documents-section__header">
+        <h2 id="documents-heading">Documents</h2>
+        <p>Reference material for this project.</p>
+      </div>
 
-{isProjectOwner && (
-  <form onSubmit={handleCreateDocument}>
-    <h3>Create Document</h3>
+      {isProjectOwner && (
+        <form className="document-form document-create-form" onSubmit={handleCreateDocument}>
+          <h3>Create Document</h3>
 
-    <div>
-      <label htmlFor="document-title">Title</label>
-      <input
-        id="document-title"
-        type="text"
-        value={documentTitle}
-        onChange={(event) => setDocumentTitle(event.target.value)}
-        placeholder="Enter document title"
-      />
-    </div>
+          <div className="document-field">
+            <label htmlFor="document-title">Document title</label>
+            <input
+              id="document-title"
+              type="text"
+              value={documentTitle}
+              onChange={(event) => setDocumentTitle(event.target.value)}
+              placeholder="Enter document title"
+            />
+          </div>
 
-    <div>
-      <label htmlFor="document-content">Content</label>
-      <textarea
-        id="document-content"
-        value={documentContent}
-        onChange={(event) => setDocumentContent(event.target.value)}
-        placeholder="Enter document content"
-      />
-    </div>
+          <div className="document-field">
+            <label htmlFor="document-content">Document content</label>
+            <textarea
+              id="document-content"
+              value={documentContent}
+              onChange={(event) => setDocumentContent(event.target.value)}
+              placeholder="Enter document content"
+              rows={6}
+            />
+          </div>
 
-    {createDocumentError && <p>{createDocumentError}</p>}
+          {createDocumentError && (
+            <p className="document-error">{createDocumentError}</p>
+          )}
 
-    <button type="submit" disabled={creatingDocument}>
-      {creatingDocument ? 'Creating...' : 'Create Document'}
-    </button>
-  </form>
-)}
-
-{documentsLoading && <p>Loading documents...</p>}
-
-{documentsError && <p>{documentsError}</p>}
-
-{deleteDocumentError && <p>{deleteDocumentError}</p>}
-
-{!documentsLoading && !documentsError && documents.length === 0 && (
-  <p>No documents yet.</p>
-)}
-
-{!documentsLoading && !documentsError && documents.length > 0 && (
-  <ul>
-    {documents.map((document) => (
-      <li key={document._id}>
-        <strong>{document.title}</strong>
-        {document.sourceType && <> — Source: {document.sourceType}</>}
-
-        {isProjectOwner && document.sourceType === 'text' && (
-          <button
-            type="button"
-            onClick={() => {
-              setEditingDocumentId(document._id);
-              setEditDocumentTitle(document.title);
-              setEditDocumentContent(document.content || '');
-              setEditDocumentError('');
-            }}
-            disabled={savingDocument || deletingDocumentId !== null}
-          >
-            Edit
-          </button>
-        )}
-
-        {isProjectOwner && (
-          <button
-            type="button"
-            onClick={() => handleDeleteDocument(document._id)}
-            disabled={deletingDocumentId !== null || savingDocument}
-          >
-            {deletingDocumentId === document._id
-              ? 'Deleting...'
-              : 'Delete'}
-          </button>
-        )}
-
-        {isProjectOwner && editingDocumentId === document._id && (
-          <form onSubmit={handleUpdateDocument}>
-            <div>
-              <label htmlFor={`edit-document-title-${document._id}`}>
-                Title
-              </label>
-              <input
-                id={`edit-document-title-${document._id}`}
-                type="text"
-                value={editDocumentTitle}
-                onChange={(event) =>
-                  setEditDocumentTitle(event.target.value)
-                }
-              />
-            </div>
-
-            <div>
-              <label htmlFor={`edit-document-content-${document._id}`}>
-                Content
-              </label>
-              <textarea
-                id={`edit-document-content-${document._id}`}
-                value={editDocumentContent}
-                onChange={(event) =>
-                  setEditDocumentContent(event.target.value)
-                }
-              />
-            </div>
-
-            {editDocumentError && <p>{editDocumentError}</p>}
-
-            <button type="submit" disabled={savingDocument}>
-              {savingDocument ? 'Saving...' : 'Save Document'}
+          <div className="document-actions">
+            <button type="submit" disabled={documentMutationInProgress}>
+              {creatingDocument ? 'Creating...' : 'Create Document'}
             </button>
+          </div>
+        </form>
+      )}
 
-            <button
-              type="button"
-              onClick={() => {
-                setEditingDocumentId(null);
-                setEditDocumentError('');
-              }}
-              disabled={savingDocument}
-            >
-              Cancel
-            </button>
-          </form>
-        )}
-      </li>
-    ))}
-  </ul>
-)}
+      {documentsLoading && <p className="document-message">Loading documents...</p>}
+      {documentsError && <p className="document-error">{documentsError}</p>}
+      {deleteDocumentError && (
+        <p className="document-error">{deleteDocumentError}</p>
+      )}
+
+      {!documentsLoading && !documentsError && documents.length === 0 && (
+        <p className="document-message">No documents yet.</p>
+      )}
+
+      {!documentsLoading && !documentsError && documents.length > 0 && (
+        <ul className="document-list">
+          {documents.map((document) => (
+            <li className="document-card" key={document._id}>
+              <div className="document-card__header">
+                <div>
+                  <h3 className="document-card__title">{document.title}</h3>
+                  {document.sourceType && (
+                    <span className="document-source">
+                      Source: {document.sourceType}
+                    </span>
+                  )}
+                </div>
+
+                {isProjectOwner && (
+                  <div className="document-actions">
+                    {document.sourceType === 'text' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingDocumentId(document._id);
+                          setEditDocumentTitle(document.title);
+                          setEditDocumentContent(document.content || '');
+                          setEditDocumentError('');
+                        }}
+                        disabled={documentMutationInProgress}
+                      >
+                        Edit
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDocument(document._id)}
+                      disabled={documentMutationInProgress}
+                    >
+                      {deletingDocumentId === document._id
+                        ? 'Deleting...'
+                        : 'Delete'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {isProjectOwner && editingDocumentId === document._id && (
+                <form className="document-form document-edit-form" onSubmit={handleUpdateDocument}>
+                  <h4>Editing “{document.title}”</h4>
+
+                  <div className="document-field">
+                    <label htmlFor={`edit-document-title-${document._id}`}>
+                      Document title
+                    </label>
+                    <input
+                      id={`edit-document-title-${document._id}`}
+                      type="text"
+                      value={editDocumentTitle}
+                      onChange={(event) =>
+                        setEditDocumentTitle(event.target.value)
+                      }
+                    />
+                  </div>
+
+                  <div className="document-field">
+                    <label htmlFor={`edit-document-content-${document._id}`}>
+                      Document content
+                    </label>
+                    <textarea
+                      id={`edit-document-content-${document._id}`}
+                      value={editDocumentContent}
+                      onChange={(event) =>
+                        setEditDocumentContent(event.target.value)
+                      }
+                      rows={8}
+                    />
+                  </div>
+
+                  {editDocumentError && (
+                    <p className="document-error">{editDocumentError}</p>
+                  )}
+
+                  <div className="document-actions">
+                    <button type="submit" disabled={documentMutationInProgress}>
+                      {savingDocument ? 'Saving...' : 'Save Changes'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={resetDocumentEdit}
+                      disabled={savingDocument}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
     <h2>Tasks</h2>
     <div>
   <label htmlFor="task-search">Search Tasks: </label>
