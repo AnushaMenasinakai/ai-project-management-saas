@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 const ProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -59,6 +61,13 @@ const ProjectDetails = () => {
   const [documentContent, setDocumentContent] = useState('');
   const [creatingDocument, setCreatingDocument] = useState(false);
   const [createDocumentError, setCreateDocumentError] = useState('');
+  const [editingDocumentId, setEditingDocumentId] = useState(null);
+  const [editDocumentTitle, setEditDocumentTitle] = useState('');
+  const [editDocumentContent, setEditDocumentContent] = useState('');
+  const [savingDocument, setSavingDocument] = useState(false);
+  const [editDocumentError, setEditDocumentError] = useState('');
+  const [deletingDocumentId, setDeletingDocumentId] = useState(null);
+  const [deleteDocumentError, setDeleteDocumentError] = useState('');
 
   const handleUpdateProject = async (event) => {
   event.preventDefault();
@@ -323,6 +332,89 @@ const handleCreateDocument = async (event) => {
   }
 };
 
+const handleUpdateDocument = async (event) => {
+  event.preventDefault();
+
+  setEditDocumentError('');
+
+  if (!editDocumentTitle.trim()) {
+    setEditDocumentError('Document title is required.');
+    return;
+  }
+
+  if (!editDocumentContent.trim()) {
+    setEditDocumentError('Document content is required.');
+    return;
+  }
+
+  const currentDocument = documents.find(
+    (document) => document._id === editingDocumentId
+  );
+  const updates = {};
+
+  if (editDocumentTitle.trim() !== currentDocument?.title) {
+    updates.title = editDocumentTitle.trim();
+  }
+
+  if (editDocumentContent.trim() !== currentDocument?.content) {
+    updates.content = editDocumentContent.trim();
+  }
+
+  if (Object.keys(updates).length === 0) {
+    setEditingDocumentId(null);
+    return;
+  }
+
+  try {
+    setSavingDocument(true);
+
+    await api.patch(`/documents/${editingDocumentId}`, updates);
+
+    setEditingDocumentId(null);
+
+    await fetchDocuments();
+  } catch (err) {
+    console.error('Update document error:', err);
+
+    setEditDocumentError(
+      err.response?.data?.message || 'Failed to update document.'
+    );
+  } finally {
+    setSavingDocument(false);
+  }
+};
+
+const handleDeleteDocument = async (documentId) => {
+  if (deletingDocumentId) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    'Are you sure you want to delete this document? This action cannot be undone.'
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setDeletingDocumentId(documentId);
+    setDeleteDocumentError('');
+
+    await api.delete(`/documents/${documentId}`);
+
+    await fetchDocuments();
+  } catch (err) {
+    console.error('Delete document error:', err);
+
+    setDeleteDocumentError(
+      err.response?.data?.message || 'Failed to delete document.'
+    );
+  } finally {
+    setDeletingDocumentId(null);
+  }
+};
+
 const handleAddMember = async (event) => {
   event.preventDefault();
 
@@ -428,6 +520,12 @@ const handleRemoveMember = async (userId) => {
       </div>
     );
   }
+  const projectOwnerId = project?.owner?._id || project?.owner;
+  const isProjectOwner = Boolean(
+    user?.id &&
+    projectOwnerId &&
+    user.id.toString() === projectOwnerId.toString()
+  );
   const filteredTasks = tasks
   .filter((task) => {
     const matchesStatus =
@@ -616,40 +714,44 @@ return (
 )}
     <h2>Documents</h2>
 
-<form onSubmit={handleCreateDocument}>
-  <h3>Create Document</h3>
+{isProjectOwner && (
+  <form onSubmit={handleCreateDocument}>
+    <h3>Create Document</h3>
 
-  <div>
-    <label htmlFor="document-title">Title</label>
-    <input
-      id="document-title"
-      type="text"
-      value={documentTitle}
-      onChange={(event) => setDocumentTitle(event.target.value)}
-      placeholder="Enter document title"
-    />
-  </div>
+    <div>
+      <label htmlFor="document-title">Title</label>
+      <input
+        id="document-title"
+        type="text"
+        value={documentTitle}
+        onChange={(event) => setDocumentTitle(event.target.value)}
+        placeholder="Enter document title"
+      />
+    </div>
 
-  <div>
-    <label htmlFor="document-content">Content</label>
-    <textarea
-      id="document-content"
-      value={documentContent}
-      onChange={(event) => setDocumentContent(event.target.value)}
-      placeholder="Enter document content"
-    />
-  </div>
+    <div>
+      <label htmlFor="document-content">Content</label>
+      <textarea
+        id="document-content"
+        value={documentContent}
+        onChange={(event) => setDocumentContent(event.target.value)}
+        placeholder="Enter document content"
+      />
+    </div>
 
-  {createDocumentError && <p>{createDocumentError}</p>}
+    {createDocumentError && <p>{createDocumentError}</p>}
 
-  <button type="submit" disabled={creatingDocument}>
-    {creatingDocument ? 'Creating...' : 'Create Document'}
-  </button>
-</form>
+    <button type="submit" disabled={creatingDocument}>
+      {creatingDocument ? 'Creating...' : 'Create Document'}
+    </button>
+  </form>
+)}
 
 {documentsLoading && <p>Loading documents...</p>}
 
 {documentsError && <p>{documentsError}</p>}
+
+{deleteDocumentError && <p>{deleteDocumentError}</p>}
 
 {!documentsLoading && !documentsError && documents.length === 0 && (
   <p>No documents yet.</p>
@@ -661,6 +763,81 @@ return (
       <li key={document._id}>
         <strong>{document.title}</strong>
         {document.sourceType && <> — Source: {document.sourceType}</>}
+
+        {isProjectOwner && document.sourceType === 'text' && (
+          <button
+            type="button"
+            onClick={() => {
+              setEditingDocumentId(document._id);
+              setEditDocumentTitle(document.title);
+              setEditDocumentContent(document.content || '');
+              setEditDocumentError('');
+            }}
+            disabled={savingDocument || deletingDocumentId !== null}
+          >
+            Edit
+          </button>
+        )}
+
+        {isProjectOwner && (
+          <button
+            type="button"
+            onClick={() => handleDeleteDocument(document._id)}
+            disabled={deletingDocumentId !== null || savingDocument}
+          >
+            {deletingDocumentId === document._id
+              ? 'Deleting...'
+              : 'Delete'}
+          </button>
+        )}
+
+        {isProjectOwner && editingDocumentId === document._id && (
+          <form onSubmit={handleUpdateDocument}>
+            <div>
+              <label htmlFor={`edit-document-title-${document._id}`}>
+                Title
+              </label>
+              <input
+                id={`edit-document-title-${document._id}`}
+                type="text"
+                value={editDocumentTitle}
+                onChange={(event) =>
+                  setEditDocumentTitle(event.target.value)
+                }
+              />
+            </div>
+
+            <div>
+              <label htmlFor={`edit-document-content-${document._id}`}>
+                Content
+              </label>
+              <textarea
+                id={`edit-document-content-${document._id}`}
+                value={editDocumentContent}
+                onChange={(event) =>
+                  setEditDocumentContent(event.target.value)
+                }
+              />
+            </div>
+
+            {editDocumentError && <p>{editDocumentError}</p>}
+
+            <button type="submit" disabled={savingDocument}>
+              {savingDocument ? 'Saving...' : 'Save Document'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setEditingDocumentId(null);
+                setEditDocumentError('');
+              }}
+              disabled={savingDocument}
+            >
+              Cancel
+            </button>
+          </form>
+        )}
       </li>
     ))}
   </ul>
