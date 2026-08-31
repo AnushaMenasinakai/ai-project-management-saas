@@ -122,20 +122,20 @@ const validateGeneratedTasks = (result) => {
 };
 
 const generateProjectTasks = async (projectName, projectDescription) => {
-  if (
-    typeof projectName !== 'string' ||
-    !projectName.trim() ||
-    typeof projectDescription !== 'string' ||
-    !projectDescription.trim()
-  ) {
-    throw new Error('Project name and project description are required.');
+  if (typeof projectName !== 'string' || !projectName.trim()) {
+    throw new Error('Project name is required.');
   }
+
+  const normalizedDescription =
+    typeof projectDescription === 'string' && projectDescription.trim()
+      ? projectDescription.trim()
+      : 'No project description was provided.';
 
   const prompt = `
 Generate 5 to 10 actionable tasks for this project.
 
 Project name: ${projectName.trim()}
-Project description: ${projectDescription.trim()}
+Project description: ${normalizedDescription}
 
 Each task must have a unique temporary ID such as task_1, task_2, task_3.
 dependsOn must contain only IDs of other tasks in this response.

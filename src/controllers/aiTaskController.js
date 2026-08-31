@@ -15,7 +15,7 @@ exports.generateTasks = async (req, res) => {
 
     const project = await Project.findOne({
       _id: projectId,
-      owner: req.user.id,
+      $or: [{ owner: req.user.id }, { members: req.user.id }],
     });
 
     if (!project) {
