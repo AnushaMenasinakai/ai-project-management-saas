@@ -315,15 +315,24 @@ exports.deleteDocument = async (req, res) => {
       });
     }
 
-    await DocumentChunk.deleteMany({
-  document: id,
-});
+    const session = await mongoose.startSession();
 
-await Document.findByIdAndDelete(id);
+    try {
+      await session.withTransaction(async () => {
+        await DocumentChunk.deleteMany(
+          { document: id },
+          { session }
+        );
 
-return res.status(200).json({
-  message: 'Document deleted successfully.',
-});
+        await Document.findByIdAndDelete(id, { session });
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    return res.status(200).json({
+      message: 'Document deleted successfully.',
+    });
   } catch (error) {
     console.error('Delete document error:', error);
 
