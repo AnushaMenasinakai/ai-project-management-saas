@@ -448,6 +448,8 @@ const handleAskProject = async (event) => {
   try {
     setRagLoading(true);
     setRagError('');
+    setRagAnswer('');
+    setRagSources([]);
 
     const response = await api.post(`/projects/${id}/ask`, {
       question: trimmedQuestion,
@@ -460,6 +462,8 @@ const handleAskProject = async (event) => {
   } catch (err) {
     console.error('Ask project error:', err);
 
+    setRagAnswer('');
+    setRagSources([]);
     setRagError(
       err.response?.data?.message || 'Failed to generate an answer.'
     );
@@ -943,8 +947,14 @@ return (
         </button>
       </form>
 
+      {ragLoading && (
+        <p className="project-qa-loading" role="status">
+          Searching project documents and generating an answer...
+        </p>
+      )}
+
       {ragAnswer && (
-        <div className="project-qa-answer">
+        <div className="project-qa-answer" aria-live="polite">
           <h3>Answer</h3>
           <p>{ragAnswer}</p>
         </div>
@@ -958,9 +968,13 @@ return (
               <li key={source.chunkId || index}>
                 {source.title && <strong>{source.title}</strong>}
                 {typeof source.score === 'number' && (
-                  <span>Score: {source.score.toFixed(3)}</span>
+                  <span className="project-qa-source-score">
+                    Score: {source.score.toFixed(3)}
+                  </span>
                 )}
-                {source.content && <p>{source.content}</p>}
+                {source.content && (
+                  <p className="project-qa-source-content">{source.content}</p>
+                )}
               </li>
             ))}
           </ul>

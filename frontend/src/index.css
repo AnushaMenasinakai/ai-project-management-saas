@@ -257,9 +257,26 @@ code {
   color: #c24141;
 }
 
+.project-qa-loading {
+  margin-top: 1rem;
+}
+
 .project-qa-answer,
 .project-qa-sources {
   margin-top: 1.5rem;
+}
+
+.project-qa-answer {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+}
+
+.project-qa-answer p,
+.project-qa-source-content {
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .project-qa-answer h3,
@@ -280,9 +297,10 @@ code {
   padding: 1rem;
   border: 1px solid var(--border);
   border-radius: 8px;
+  background: var(--code-bg);
 }
 
-.project-qa-sources span {
+.project-qa-source-score {
   font-size: 0.875rem;
 }
 
