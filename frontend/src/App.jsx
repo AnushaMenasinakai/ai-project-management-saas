@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import Projects from './pages/Projects';
 import ProjectDetails from './pages/ProjectDetails';
+import AppShell from './components/AppShell';
 
 const App = () => {
   return (
@@ -13,30 +14,17 @@ const App = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route
-         path="/dashboard"
-         element={
-         <ProtectedRoute>
-         <Dashboard />
-         </ProtectedRoute>
-  }
-/>
+          element={
+            <ProtectedRoute>
+              <AppShell />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/projects/:id" element={<ProjectDetails />} />
+        </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
-        <Route
-         path="/projects"
-         element={
-        <ProtectedRoute>
-      <Projects />
-    </ProtectedRoute>
-  }
-/>
-        <Route
-        path="/projects/:id"
-        element={
-       <ProtectedRoute>
-      <ProjectDetails />
-    </ProtectedRoute>
-  }
-/>
       </Routes>
     </BrowserRouter>
   );

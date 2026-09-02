@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import Alert from '../components/Alert';
+import AuthLayout from '../components/AuthLayout';
+import Button from '../components/Button';
+import PasswordField from '../components/PasswordField';
 import { useAuth } from '../context/AuthContext';
 
 const Register = () => {
@@ -42,58 +46,63 @@ const Register = () => {
   };
 
   return (
-    <main>
-      <h1>AI Project Management SaaS</h1>
-
-      <form onSubmit={handleSubmit}>
-        <div>
+    <AuthLayout
+      eyebrow="Create your account"
+      title="Start your workspace"
+      description="Set up your account and begin organizing project work."
+    >
+      <form className="auth-form" onSubmit={handleSubmit}>
+        <div className="form-field">
           <label htmlFor="name">Name</label>
           <input
             id="name"
             name="name"
             type="text"
+            autoComplete="name"
+            placeholder="Your name"
             value={form.name}
             onChange={handleChange}
             required
           />
         </div>
 
-        <div>
+        <div className="form-field">
           <label htmlFor="email">Email</label>
           <input
             id="email"
             name="email"
             type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
             value={form.email}
             onChange={handleChange}
             required
           />
         </div>
 
-        <div>
-          <label htmlFor="password">Password</label>
-          <input
+        <PasswordField
             id="password"
             name="password"
-            type="password"
+            autoComplete="new-password"
+            placeholder="Create a password"
             value={form.password}
             onChange={handleChange}
             minLength={8}
             required
-          />
-        </div>
+            helper="Use at least 8 characters."
+        />
 
-        {error && <p>{error}</p>}
+        {error && <Alert title="Unable to create account">{error}</Alert>}
 
-        <button type="submit" disabled={submitting}>
+        <Button className="auth-form__submit" type="submit" disabled={submitting}>
           {submitting ? 'Registering...' : 'Register'}
-        </button>
+        </Button>
       </form>
 
-      <p>
-        Already have an account? <Link to="/login">Login</Link>
+      <p className="auth-card__switch">
+        Already have an account? <Link to="/login">Sign in</Link>
       </p>
-    </main>
+    </AuthLayout>
   );
 };
 

@@ -1,7 +1,31 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import Alert from '../components/Alert';
+import Badge from '../components/Badge';
+import Button from '../components/Button';
+import Card from '../components/Card';
+import EmptyState from '../components/EmptyState';
+import LoadingState from '../components/LoadingState';
+import PageHeader from '../components/PageHeader';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+
+const formatLabel = (value) =>
+  value ? value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Unknown';
+
+const statusVariant = (status) => ({
+  active: 'success',
+  completed: 'success',
+  in_progress: 'info',
+  planning: 'info',
+  todo: 'neutral',
+}[status] || 'neutral');
+
+const priorityVariant = (priority) => ({
+  high: 'danger',
+  low: 'neutral',
+  medium: 'warning',
+}[priority] || 'neutral');
 
 const ProjectDetails = () => {
   const { id } = useParams();
@@ -53,6 +77,7 @@ const ProjectDetails = () => {
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState('');
   const [memberEmail, setMemberEmail] = useState('');
+  const [showMemberForm, setShowMemberForm] = useState(false);
   const [addingMember, setAddingMember] = useState(false);
   const [addMemberError, setAddMemberError] = useState('');
   const [removingMemberId, setRemovingMemberId] = useState(null);
@@ -529,6 +554,7 @@ const handleAddMember = async (event) => {
     setMemberEmail('');
 
     await fetchMembers();
+    setShowMemberForm(false);
   } catch (err) {
     console.error('Add member error:', err);
 
@@ -590,17 +616,17 @@ const handleRemoveMember = async (userId) => {
   }, [id, fetchDocuments]);
 
   if (loading) {
-    return <p>Loading project...</p>;
+    return <LoadingState message="Loading project workspace..." />;
   }
 
   if (error) {
     return (
-      <div>
-        <p>{error}</p>
-
-        <button type="button" onClick={() => navigate('/projects')}>
-          Back to Projects
-        </button>
+      <div className="page project-workspace">
+        <PageHeader eyebrow="Project workspace" title="Project unavailable" />
+        <Alert>{error}</Alert>
+        <Button variant="secondary" onClick={() => navigate('/projects')}>
+          Return to Projects
+        </Button>
       </div>
     );
   }
@@ -680,11 +706,16 @@ const handleRemoveMember = async (userId) => {
 
   if (editing && isProjectOwner) {
   return (
-    <div>
-      <h1>Edit Project</h1>
+    <div className="page project-workspace">
+      <PageHeader
+        eyebrow="Project settings"
+        title={`Edit ${project.name}`}
+        description="Update the project details shown to everyone in this workspace."
+      />
 
-      <form onSubmit={handleUpdateProject}>
-        <div>
+      <Card className="workspace-form-card project-edit-card">
+      <form className="workspace-form" onSubmit={handleUpdateProject}>
+        <div className="form-field form-field--wide">
           <label htmlFor="project-name">Project Name</label>
 
           <input
@@ -695,7 +726,7 @@ const handleRemoveMember = async (userId) => {
           />
         </div>
 
-        <div>
+        <div className="form-field form-field--wide">
           <label htmlFor="project-description">Description</label>
 
           <textarea
@@ -705,7 +736,7 @@ const handleRemoveMember = async (userId) => {
           />
         </div>
 
-        <div>
+        <div className="form-field">
           <label htmlFor="project-status">Status</label>
 
           <select
@@ -720,38 +751,78 @@ const handleRemoveMember = async (userId) => {
           </select>
         </div>
 
-        {formError && <p>{formError}</p>}
+        {formError && <Alert className="form-field--wide">{formError}</Alert>}
 
-        <button type="submit" disabled={saving}>
+        <div className="form-actions form-field--wide">
+        <Button type="submit" disabled={saving}>
           {saving ? 'Saving...' : 'Save Changes'}
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
           onClick={() => {
             setEditing(false);
             setFormError('');
           }}
         >
           Cancel
-        </button>
+        </Button>
+        </div>
       </form>
+      </Card>
     </div>
   );
 }
 
 return (
-  <div>
-    <h1>{project.name}</h1>
+  <div className="page project-workspace">
+    <button className="project-back-link" type="button" onClick={() => navigate('/projects')}>
+      <span aria-hidden="true">←</span> Projects
+    </button>
+    <PageHeader
+      eyebrow={isProjectOwner ? 'Owner workspace' : 'Shared workspace'}
+      title={project.name}
+      description={project.description || 'No description provided.'}
+      actions={(
+        <>
+          <Badge variant={statusVariant(project.status)}>{formatLabel(project.status)}</Badge>
+          {isProjectOwner && (
+            <>
+              <Button variant="secondary" onClick={() => {
+                setName(project.name);
+                setDescription(project.description || '');
+                setStatus(project.status);
+                setFormError('');
+                setEditing(true);
+              }}>
+                Edit Project
+              </Button>
+              <Button variant="danger" onClick={handleDeleteProject} disabled={deleting}>
+                {deleting ? 'Deleting...' : 'Delete Project'}
+              </Button>
+            </>
+          )}
+        </>
+      )}
+    />
+    {isProjectOwner && deleteError && <Alert>{deleteError}</Alert>}
 
-    <p>{project.description || 'No description provided.'}</p>
+    <Card id="project-members" className="workspace-section members-workspace" aria-labelledby="members-heading">
+      <div className="workspace-section__header">
+        <div><p className="section-eyebrow">Collaboration</p><h2 id="members-heading">Members</h2>
+        <p>{members.length} {members.length === 1 ? 'member' : 'members'} can collaborate in this project.</p></div>
+        {isProjectOwner && !showMemberForm && (
+          <Button variant="secondary" onClick={() => { setShowMemberForm(true); setAddMemberError(''); }}>
+            + Add member
+          </Button>
+        )}
+      </div>
 
-    <p>Status: {project.status}</p>
-   <h2>Members</h2>
-
-{isProjectOwner && (
-<form onSubmit={handleAddMember}>
-  <div>
+{isProjectOwner && showMemberForm && (
+<form className="workspace-form member-form" onSubmit={handleAddMember}>
+  <div className="member-form__heading"><h3>Add project member</h3><p>Add a registered user by email address.</p></div>
+  <div className="form-field">
     <label htmlFor="member-email">Member Email</label>
 
     <input
@@ -763,46 +834,52 @@ return (
     />
   </div>
 
-  {addMemberError && <p>{addMemberError}</p>}
+  {addMemberError && <Alert>{addMemberError}</Alert>}
 
-  <button type="submit" disabled={addingMember}>
+  <Button type="submit" disabled={addingMember}>
     {addingMember ? 'Adding...' : 'Add Member'}
-  </button>
+  </Button>
+  <Button type="button" variant="secondary" disabled={addingMember} onClick={() => { setShowMemberForm(false); setAddMemberError(''); }}>
+    Cancel
+  </Button>
 </form>
 )}
 
-{isProjectOwner && removeMemberError && <p>{removeMemberError}</p>}
+{isProjectOwner && removeMemberError && <Alert>{removeMemberError}</Alert>}
 
-{membersLoading && <p>Loading members...</p>}
+{membersLoading && <LoadingState message="Loading members..." />}
 
-{membersError && <p>{membersError}</p>}
+{membersError && <Alert>{membersError}</Alert>}
 
 {!membersLoading && !membersError && members.length === 0 && (
-  <p>No members yet.</p>
+  <EmptyState title="No members yet" description="Project members will appear here after the owner adds them." />
 )}
 
 {!membersLoading && !membersError && members.length > 0 && (
-  <ul>
+  <ul className="member-list">
     {members.map((member) => (
-      <li key={member._id}>
-        <strong>{member.name}</strong> — {member.email}
+      <li className="member-row" key={member._id}>
+        <span className="member-avatar" aria-hidden="true">{member.name?.charAt(0).toUpperCase() || '?'}</span>
+        <span className="member-identity"><strong>{member.name}</strong><span>{member.email}</span></span>
 
         {isProjectOwner && (
-          <button
+          <Button
             type="button"
+            variant="danger-secondary"
             onClick={() => handleRemoveMember(member._id)}
             disabled={removingMemberId === member._id}
           >
             {removingMemberId === member._id
               ? 'Removing...'
               : 'Remove'}
-          </button>
+          </Button>
         )}
       </li>
     ))}
   </ul>
 )}
-    <section className="documents-section" aria-labelledby="documents-heading">
+    </Card>
+    <Card id="project-documents" className="documents-section workspace-section" aria-labelledby="documents-heading">
       <div className="documents-section__header">
         <h2 id="documents-heading">Documents</h2>
         <p>Reference material for this project.</p>
@@ -810,7 +887,7 @@ return (
 
       {isProjectOwner && (
         <form className="document-form document-create-form" onSubmit={handleCreateDocument}>
-          <h3>Create Document</h3>
+          <div className="document-form__header"><p className="section-eyebrow">Create document</p><h3>Add project knowledge</h3><p>Create a text reference that the project can use.</p></div>
 
           <div className="document-field">
             <label htmlFor="document-title">Document title</label>
@@ -830,27 +907,30 @@ return (
               value={documentContent}
               onChange={(event) => setDocumentContent(event.target.value)}
               placeholder="Enter document content"
-              rows={6}
+              rows={5}
             />
           </div>
 
-          {createDocumentError && (
-            <p className="document-error">{createDocumentError}</p>
-          )}
+          {createDocumentError && <Alert>{createDocumentError}</Alert>}
 
           <div className="document-actions">
-            <button type="submit" disabled={documentMutationInProgress}>
+            <Button type="submit" disabled={documentMutationInProgress}>
               {creatingDocument ? 'Creating...' : 'Create Document'}
-            </button>
+            </Button>
           </div>
         </form>
       )}
 
       {documentsLoading && <p className="document-message">Loading documents...</p>}
-      {documentsError && <p className="document-error">{documentsError}</p>}
+      {documentsError && <Alert>{documentsError}</Alert>}
       {deleteDocumentError && (
-        <p className="document-error">{deleteDocumentError}</p>
+        <Alert>{deleteDocumentError}</Alert>
       )}
+
+      <div className="document-list-heading">
+        <div><p className="section-eyebrow">Project documents</p><h3>Available reference material</h3></div>
+        <span>{documents.length} {documents.length === 1 ? 'document' : 'documents'}</span>
+      </div>
 
       {!documentsLoading && !documentsError && documents.length === 0 && (
         <p className="document-message">No documents yet.</p>
@@ -864,17 +944,17 @@ return (
                 <div>
                   <h3 className="document-card__title">{document.title}</h3>
                   {document.sourceType && (
-                    <span className="document-source">
-                      Source: {document.sourceType}
-                    </span>
+                    <Badge className="document-source">{formatLabel(document.sourceType)}</Badge>
                   )}
+                  {document.content && <p className="document-card__preview">{document.content}</p>}
                 </div>
 
                 {isProjectOwner && (
                   <div className="document-actions">
                     {document.sourceType === 'text' && (
-                      <button
+                      <Button
                         type="button"
+                        variant="secondary"
                         onClick={() => {
                           setEditingDocumentId(document._id);
                           setEditDocumentTitle(document.title);
@@ -884,18 +964,19 @@ return (
                         disabled={documentMutationInProgress}
                       >
                         Edit
-                      </button>
+                      </Button>
                     )}
 
-                    <button
+                    <Button
                       type="button"
+                      variant="danger-secondary"
                       onClick={() => handleDeleteDocument(document._id)}
                       disabled={documentMutationInProgress}
                     >
                       {deletingDocumentId === document._id
                         ? 'Deleting...'
                         : 'Delete'}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -932,22 +1013,21 @@ return (
                     />
                   </div>
 
-                  {editDocumentError && (
-                    <p className="document-error">{editDocumentError}</p>
-                  )}
+                  {editDocumentError && <Alert>{editDocumentError}</Alert>}
 
                   <div className="document-actions">
-                    <button type="submit" disabled={documentMutationInProgress}>
+                    <Button type="submit" disabled={documentMutationInProgress}>
                       {savingDocument ? 'Saving...' : 'Save Changes'}
-                    </button>
+                    </Button>
 
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
                       onClick={resetDocumentEdit}
                       disabled={savingDocument}
                     >
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 </form>
               )}
@@ -955,13 +1035,13 @@ return (
           ))}
         </ul>
       )}
-    </section>
-    <section className="project-qa-section" aria-labelledby="project-qa-heading">
-      <h2 id="project-qa-heading">Project Q&amp;A</h2>
+    </Card>
+    <Card id="project-qa" className="project-qa-section workspace-section" aria-labelledby="project-qa-heading">
+      <div className="documents-section__header"><h2 id="project-qa-heading">Project Q&amp;A</h2><p>Ask questions using knowledge from this project's documents.</p></div>
 
       <form className="project-qa-form" onSubmit={handleAskProject}>
         <div className="project-qa-field">
-          <label htmlFor="project-question">Ask about this project</label>
+          <label htmlFor="project-question">Ask a question</label>
           <textarea
             id="project-question"
             value={ragQuestion}
@@ -971,11 +1051,11 @@ return (
           />
         </div>
 
-        {ragError && <p className="project-qa-error">{ragError}</p>}
+        {ragError && <Alert>{ragError}</Alert>}
 
-        <button type="submit" disabled={ragLoading}>
+        <Button type="submit" disabled={ragLoading}>
           {ragLoading ? 'Asking...' : 'Ask AI'}
-        </button>
+        </Button>
       </form>
 
       {ragLoading && (
@@ -986,23 +1066,23 @@ return (
 
       {ragAnswer && (
         <div className="project-qa-answer" aria-live="polite">
-          <h3>Answer</h3>
+          <p className="section-eyebrow">AI answer</p>
           <p>{ragAnswer}</p>
         </div>
       )}
 
       {ragSources.length > 0 && (
         <div className="project-qa-sources">
-          <h3>Sources</h3>
+          <div className="project-qa-sources__header"><h3>Sources</h3><span>{ragSources.length} {ragSources.length === 1 ? 'source' : 'sources'}</span></div>
           <ul>
             {ragSources.map((source, index) => (
               <li key={source.chunkId || index}>
-                {source.title && <strong>{source.title}</strong>}
+                <div className="project-qa-source__header">{source.title && <strong>{source.title}</strong>}
                 {typeof source.score === 'number' && (
                   <span className="project-qa-source-score">
-                    Score: {source.score.toFixed(3)}
+                    Relevance {(source.score * 100).toFixed(1)}%
                   </span>
-                )}
+                )}</div>
                 {source.content && (
                   <p className="project-qa-source-content">{source.content}</p>
                 )}
@@ -1011,8 +1091,15 @@ return (
           </ul>
         </div>
       )}
-    </section>
-    <h2>Tasks</h2>
+    </Card>
+    <section id="project-tasks" className="task-workspace workspace-section" aria-labelledby="tasks-heading">
+    <div className="workspace-section__header task-workspace__header">
+      <div><p className="section-eyebrow">Execution</p><h2 id="tasks-heading">Tasks</h2>
+      <p>{tasks.length} {tasks.length === 1 ? 'task' : 'tasks'} in this project.</p></div>
+      <Button onClick={() => { setShowTaskForm(true); setTaskFormError(''); }}>
+        Create Task
+      </Button>
+    </div>
     <section
       className="ai-task-generation"
       aria-labelledby="ai-task-generation-heading"
@@ -1039,19 +1126,16 @@ return (
           AI is generating and organizing tasks for this project...
         </p>
       )}
-      {generateTasksError && (
-        <p className="ai-task-generation__error" role="alert">
-          {generateTasksError}
-        </p>
-      )}
+      {generateTasksError && <Alert>{generateTasksError}</Alert>}
       {generateTasksSuccess && (
-        <p className="ai-task-generation__success" role="status">
+        <p className="ai-task-generation__success alert alert--success" role="status">
           {generateTasksSuccess}
         </p>
       )}
     </section>
-    <div>
-  <label htmlFor="task-search">Search Tasks: </label>
+    <div className="task-toolbar" aria-label="Task search, filters, and sorting">
+    <div className="form-field task-toolbar__search">
+  <label htmlFor="task-search">Search</label>
 
   <input
     id="task-search"
@@ -1062,8 +1146,8 @@ return (
   />
 </div>
 
-    <div>
-  <label htmlFor="task-status-filter">Filter by Status: </label>
+    <div className="form-field">
+  <label htmlFor="task-status-filter">Status</label>
 
   <select
     id="task-status-filter"
@@ -1077,8 +1161,8 @@ return (
   </select>
 </div>
 
-<div>
-  <label htmlFor="task-priority-filter">Filter by Priority: </label>
+<div className="form-field">
+  <label htmlFor="task-priority-filter">Priority</label>
 
   <select
     id="task-priority-filter"
@@ -1092,8 +1176,8 @@ return (
   </select>
 </div>
 
-<div>
-  <label htmlFor="task-sort">Sort By: </label>
+<div className="form-field">
+  <label htmlFor="task-sort">Sort</label>
 
   <select
     id="task-sort"
@@ -1108,39 +1192,42 @@ return (
     <option value="priority_low">Priority: Low to High</option>
   </select>
 </div>
+</div>
 
-{tasksLoading && <p>Loading tasks...</p>}
+<div className="task-list-heading"><p className="section-eyebrow">Your tasks</p><span>{filteredTasks.length} shown</span></div>
 
-{tasksError && <p>{tasksError}</p>}
+{tasksLoading && <LoadingState message="Loading tasks..." />}
+
+{tasksError && <Alert>{tasksError}</Alert>}
 
 {!tasksLoading && !tasksError && tasks.length === 0 && (
-  <p>No tasks yet.</p>
+  <EmptyState title="No tasks yet" description="Create a task or use AI task generation to start planning this project." />
 )}
 {!tasksLoading &&
   !tasksError &&
   tasks.length > 0 &&
   filteredTasks.length === 0 && (
-    <p>No tasks match your current search and filters.</p>
+    <EmptyState title="No matching tasks" description="Try changing the search term or filters." />
 )}
   {filteredTasks.map((task) => (
-  <div key={task._id}>
-    <h3>{task.title}</h3>
+  <Card as="article" className="task-card" key={task._id}>
+    <div className="task-card__header"><h3>{task.title}</h3><div className="task-card__badges">
+      <Badge variant={statusVariant(task.status)}>{formatLabel(task.status)}</Badge>
+      <Badge variant={priorityVariant(task.priority)}>{formatLabel(task.priority)} priority</Badge>
+    </div></div>
 
-    <p>
+    <p className="task-card__description">
       {task.description || 'No description provided.'}
     </p>
 
-    <p>Status: {task.status}</p>
-    <p>Priority: {task.priority}</p>
-    <p>
-  Assigned To:{' '}
-  {task.assignedTo?.name || 'Unassigned'}
-</p>
+    <dl className="task-card__metadata">
+      <div><dt>Assigned to</dt><dd>{task.assignedTo?.name || 'Unassigned'}</dd></div>
+      <div><dt>Due date</dt><dd>{task.dueDate ? new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'No due date'}</dd></div>
+    </dl>
     {task.dependencies && task.dependencies.length > 0 && (
-  <div>
-    <p>Dependencies:</p>
-
-    <ul>
+  <div className="task-card__dependencies">
+    <p>Dependencies</p>
+    <ul className="dependency-chips">
       {task.dependencies.map((dependency) => (
         <li key={dependency._id || dependency}>
           {dependency.title || dependency}
@@ -1150,13 +1237,7 @@ return (
   </div>
 )}
 
-    {task.dueDate && (
-      <p>
-        Due: {new Date(task.dueDate).toLocaleDateString()}
-      </p>
-    )}
-
-    <button
+    <div className="task-card__actions"><Button variant="secondary"
       type="button"
       onClick={() => {
   setEditingTaskId(task._id);
@@ -1185,17 +1266,20 @@ return (
 }}
     >
       Edit Task
-    </button>
+    </Button>
 
-    <button
-  type="button"
-  onClick={() => handleDeleteTask(task._id)}
-  >
-  Delete Task
-  </button>
+    {isProjectOwner && (
+      <Button
+        variant="danger-secondary"
+        type="button"
+        onClick={() => handleDeleteTask(task._id)}
+      >
+        Delete Task
+      </Button>
+    )}</div>
 
     {editingTaskId === task._id && (
-      <form onSubmit={handleUpdateTask}>
+      <form className="workspace-form task-edit-form" onSubmit={handleUpdateTask}>
         <h3>Edit Task</h3>
 
         <div>
@@ -1218,6 +1302,7 @@ return (
 
           <textarea
             id="edit-task-description"
+            rows={4}
             value={editTaskDescription}
             onChange={(event) =>
               setEditTaskDescription(event.target.value)
@@ -1295,7 +1380,7 @@ return (
   </select>
 </div>
 
-        <div>
+        <div className="task-form__dependencies">
   <label htmlFor="edit-task-dependencies">
     Dependencies
   </label>
@@ -1303,6 +1388,7 @@ return (
   <select
     id="edit-task-dependencies"
     multiple
+    size={3}
     value={editTaskDependencies}
     onChange={(event) => {
       const selectedDependencies = Array.from(
@@ -1321,62 +1407,34 @@ return (
         </option>
       ))}
   </select>
+  <small className="form-help">Hold Ctrl or Command to select more than one dependency.</small>
 </div>
 
-{dependencyError && <p>{dependencyError}</p>}
+{dependencyError && <Alert>{dependencyError}</Alert>}
 
-        {editTaskError && <p>{editTaskError}</p>}
+        {editTaskError && <Alert>{editTaskError}</Alert>}
 
-        <button type="submit" disabled={updatingTask}>
-          {updatingTask ? 'Updating...' : 'Update Task'}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
+        <div className="form-actions task-form__actions">
+        <Button type="button" variant="secondary" onClick={() => {
   setEditingTaskId(null);
   setEditTaskError('');
   setDependencyError('');
   setEditTaskDependencies([]);
   setEditTaskAssignedTo('');
-}}
-        >
+}}>
           Cancel
-        </button>
+        </Button>
+        <Button type="submit" disabled={updatingTask}>
+          {updatingTask ? 'Updating...' : 'Update Task'}
+        </Button>
+        </div>
       </form>
     )}
-  </div>
+  </Card>
 ))}
 
-    {isProjectOwner && deleteError && <p>{deleteError}</p>}
-
-    {isProjectOwner && (
-      <button
-        type="button"
-        onClick={() => {
-          setName(project.name);
-          setDescription(project.description || '');
-          setStatus(project.status);
-          setFormError('');
-          setEditing(true);
-        }}
-      >
-        Edit Project
-      </button>
-    )}
-
-   <button
-  type="button"
-  onClick={() => {
-    setShowTaskForm(true);
-    setTaskFormError('');
-  }}
->
-  Create Task
-</button>
-
 {showTaskForm && (
-  <form onSubmit={handleCreateTask}>
+  <form className="workspace-form task-create-form" onSubmit={handleCreateTask}>
     <h3>Create Task</h3>
 
     <div>
@@ -1396,6 +1454,7 @@ return (
 
       <textarea
         id="task-description"
+        rows={4}
         value={taskDescription}
         onChange={(event) => setTaskDescription(event.target.value)}
         placeholder="Enter task description"
@@ -1459,40 +1518,22 @@ return (
   </select>
 </div>
 
-    {taskFormError && <p>{taskFormError}</p>}
+    {taskFormError && <Alert>{taskFormError}</Alert>}
 
-    <button type="submit" disabled={creatingTask}>
-      {creatingTask ? 'Creating...' : 'Create Task'}
-    </button>
-
-    <button
-      type="button"
-      onClick={() => {
+    <div className="form-actions task-form__actions">
+    <Button type="button" variant="secondary" onClick={() => {
         setShowTaskForm(false);
         setTaskFormError('');
-      }}
-    >
+      }}>
       Cancel
-    </button>
+    </Button>
+    <Button type="submit" disabled={creatingTask}>
+      {creatingTask ? 'Creating...' : 'Create Task'}
+    </Button>
+    </div>
   </form>
 )}
-
-    {isProjectOwner && (
-      <button
-        type="button"
-        onClick={handleDeleteProject}
-        disabled={deleting}
-      >
-        {deleting ? 'Deleting...' : 'Delete Project'}
-      </button>
-    )}
-
-    <button
-      type="button"
-      onClick={() => navigate('/projects')}
-    >
-      Back to Projects
-    </button>
+    </section>
   </div>
 );
 };

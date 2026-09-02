@@ -376,6 +376,12 @@ exports.deleteTask = async (req, res) => {
       });
     }
 
+    if (project.owner.toString() !== req.user.id.toString()) {
+      return res.status(403).json({
+        message: 'Only the project owner can delete tasks.',
+      });
+    }
+
     await Task.updateMany(
       { project: task.project, dependencies: task._id },
       { $pull: { dependencies: task._id } }

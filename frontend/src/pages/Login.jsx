@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import Alert from '../components/Alert';
+import AuthLayout from '../components/AuthLayout';
+import Button from '../components/Button';
+import PasswordField from '../components/PasswordField';
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
@@ -40,45 +44,47 @@ const Login = () => {
   };
 
   return (
-    <main>
-      <h1>AI Project Management SaaS</h1>
-
-      <form onSubmit={handleSubmit}>
-        <div>
+    <AuthLayout
+      eyebrow="Welcome back"
+      title="Sign in to your workspace"
+      description="Continue planning projects and collaborating with your team."
+    >
+      <form className="auth-form" onSubmit={handleSubmit}>
+        <div className="form-field">
           <label htmlFor="email">Email</label>
           <input
             id="email"
             name="email"
             type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
             value={form.email}
             onChange={handleChange}
             required
           />
         </div>
 
-        <div>
-          <label htmlFor="password">Password</label>
-          <input
+        <PasswordField
             id="password"
             name="password"
-            type="password"
+            autoComplete="current-password"
+            placeholder="Enter your password"
             value={form.password}
             onChange={handleChange}
             required
-          />
-        </div>
+        />
 
-        {error && <p>{error}</p>}
+        {error && <Alert title="Unable to sign in">{error}</Alert>}
 
-        <button type="submit" disabled={submitting}>
-          {submitting ? 'Logging in...' : 'Login'}
-        </button>
+        <Button className="auth-form__submit" type="submit" disabled={submitting}>
+          {submitting ? 'Signing in...' : 'Sign in'}
+        </Button>
       </form>
 
-      <p>
-        Need an account? <Link to="/register">Register</Link>
+      <p className="auth-card__switch">
+        New to the workspace? <Link to="/register">Create an account</Link>
       </p>
-    </main>
+    </AuthLayout>
   );
 };
 
