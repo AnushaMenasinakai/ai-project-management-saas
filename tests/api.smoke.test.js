@@ -9,7 +9,13 @@ process.env.FRONTEND_ORIGIN = 'http://localhost:5173';
 const mockMongoose = require('mongoose');
 const request = require('supertest');
 
-const mockDatabase = { users: [], projects: [], tasks: [] };
+const mockDatabase = {
+  users: [],
+  projects: [],
+  tasks: [],
+  documents: [],
+  chunks: [],
+};
 
 const mockIdsEqual = (left, right) =>
   left !== undefined && right !== undefined && left.toString() === right.toString();
@@ -62,16 +68,50 @@ jest.mock('../src/models/Project', () => ({
       createdAt: now,
       updatedAt: now,
     };
-    project.toObject = () => ({ ...project, toObject: undefined });
+    project.save = jest.fn(async () => project);
+    project.toObject = () => ({ ...project, save: undefined, toObject: undefined });
     mockDatabase.projects.push(project);
     return project;
   }),
   find: jest.fn(async (query) =>
     mockDatabase.projects.filter((project) => mockProjectMatches(project, query))
   ),
-  findOne: jest.fn(async (query) =>
-    mockDatabase.projects.find((project) => mockProjectMatches(project, query)) || null
-  ),
+  findOne: jest.fn((query) => {
+    const project =
+      mockDatabase.projects.find((candidate) =>
+        mockProjectMatches(candidate, query)
+      ) || null;
+    const result = Promise.resolve(project);
+    result.populate = jest.fn(async () => {
+      if (!project) return null;
+      return {
+        ...project,
+        members: project.members.map((memberId) => {
+          const user = mockDatabase.users.find((candidate) =>
+            mockIdsEqual(candidate._id, memberId)
+          );
+          return user && { _id: user._id, name: user.name, email: user.email };
+        }),
+      };
+    });
+    return result;
+  }),
+  findOneAndUpdate: jest.fn(async (query, updates) => {
+    const project =
+      mockDatabase.projects.find((candidate) =>
+        mockProjectMatches(candidate, query)
+      ) || null;
+    if (!project) return null;
+    Object.assign(project, updates, { updatedAt: new Date() });
+    return project;
+  }),
+  deleteOne: jest.fn(async (query) => {
+    const index = mockDatabase.projects.findIndex((project) =>
+      mockProjectMatches(project, query)
+    );
+    if (index !== -1) mockDatabase.projects.splice(index, 1);
+    return { acknowledged: true, deletedCount: index === -1 ? 0 : 1 };
+  }),
 }));
 
 jest.mock('../src/models/Task', () => ({
@@ -96,6 +136,19 @@ jest.mock('../src/models/Task', () => ({
     mockDatabase.tasks.push(task);
     return task;
   }),
+  find: jest.fn((query) => {
+    const tasks = mockDatabase.tasks.filter(
+      (task) =>
+        (!query.project || mockIdsEqual(task.project, query.project)) &&
+        (!query._id?.$in || query._id.$in.some((id) => mockIdsEqual(task._id, id)))
+    );
+    const result = {
+      populate: jest.fn(() => result),
+      select: jest.fn(async () => tasks),
+      sort: jest.fn(async () => tasks),
+    };
+    return result;
+  }),
   findById: jest.fn(async (id) =>
     mockDatabase.tasks.find((task) => mockIdsEqual(task._id, id)) || null
   ),
@@ -119,7 +172,90 @@ jest.mock('../src/models/Task', () => ({
     });
     return { acknowledged: true };
   }),
+  deleteMany: jest.fn(async (query) => {
+    mockDatabase.tasks = mockDatabase.tasks.filter(
+      (task) => !mockIdsEqual(task.project, query.project)
+    );
+    return { acknowledged: true };
+  }),
 }));
+
+jest.mock('../src/models/Document', () => {
+  function MockDocument(data) {
+    Object.assign(this, {
+      _id: new mockMongoose.Types.ObjectId(),
+      sourceType: 'text',
+      ...data,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+  MockDocument.prototype.save = jest.fn(async function save() {
+    mockDatabase.documents.push(this);
+    return this;
+  });
+  MockDocument.find = jest.fn((query) => ({
+    sort: jest.fn(async () =>
+      mockDatabase.documents.filter((document) =>
+        mockIdsEqual(document.project, query.project)
+      )
+    ),
+  }));
+  MockDocument.findById = jest.fn(async (id) =>
+    mockDatabase.documents.find((document) => mockIdsEqual(document._id, id)) || null
+  );
+  MockDocument.findByIdAndUpdate = jest.fn(async (id, updates) => {
+    const document = mockDatabase.documents.find((candidate) =>
+      mockIdsEqual(candidate._id, id)
+    );
+    if (!document) return null;
+    Object.assign(document, updates, { updatedAt: new Date() });
+    return document;
+  });
+  MockDocument.findByIdAndDelete = jest.fn(async (id) => {
+    const index = mockDatabase.documents.findIndex((document) =>
+      mockIdsEqual(document._id, id)
+    );
+    return index === -1 ? null : mockDatabase.documents.splice(index, 1)[0];
+  });
+  MockDocument.deleteMany = jest.fn(async (query) => {
+    mockDatabase.documents = mockDatabase.documents.filter(
+      (document) => !mockIdsEqual(document.project, query.project)
+    );
+    return { acknowledged: true };
+  });
+
+  return MockDocument;
+});
+
+jest.mock('../src/models/DocumentChunk', () => ({
+  deleteMany: jest.fn(async (query) => {
+    mockDatabase.chunks = mockDatabase.chunks.filter((chunk) => {
+      if (query.project) return !mockIdsEqual(chunk.project, query.project);
+      return !mockIdsEqual(chunk.document, query.document);
+    });
+    return { acknowledged: true };
+  }),
+  insertMany: jest.fn(async (chunks) => {
+    mockDatabase.chunks.push(...chunks);
+    return chunks;
+  }),
+}));
+
+jest.mock('../src/services/embeddingService', () => ({
+  generateEmbedding: jest.fn(async () => [0.25, 0.5, 0.75]),
+}));
+
+jest.mock('../src/middleware/rateLimiters', () => ({
+  authLimiter: (req, res, next) => next(),
+  aiLimiter: (req, res, next) => next(),
+}));
+
+jest.spyOn(mockMongoose, 'startSession').mockResolvedValue({
+  endSession: jest.fn(async () => undefined),
+  withTransaction: jest.fn(async (operation) => operation()),
+});
 
 const app = require('../src/app');
 
@@ -129,10 +265,24 @@ const OWNER = {
   password: 'test-password-123',
 };
 
+const MEMBER = {
+  name: 'Test Member',
+  email: 'member@test.local',
+  password: 'test-password-123',
+};
+
+const OUTSIDER = {
+  name: 'Test Outsider',
+  email: 'outsider@test.local',
+  password: 'test-password-123',
+};
+
 const clearDatabase = async () => {
   mockDatabase.users.length = 0;
   mockDatabase.projects.length = 0;
   mockDatabase.tasks.length = 0;
+  mockDatabase.documents.length = 0;
+  mockDatabase.chunks.length = 0;
 };
 
 const registerAndLogin = async (user = OWNER) => {
@@ -164,6 +314,44 @@ const createOwnedProject = async (token) => {
     .expect(201);
 
   return response.body.project;
+};
+
+const createCollaborationFixture = async () => {
+  const owner = await registerAndLogin(OWNER);
+  const member = await registerAndLogin(MEMBER);
+  const outsider = await registerAndLogin(OUTSIDER);
+  const project = await createOwnedProject(owner.token);
+  const storedProject = mockDatabase.projects.find((candidate) =>
+    mockIdsEqual(candidate._id, project._id)
+  );
+  storedProject.members.push(member.user.id);
+
+  return { member, outsider, owner, project, storedProject };
+};
+
+const createProjectTask = async (token, projectId, title = 'Permission test task') => {
+  const response = await request(app)
+    .post('/api/tasks')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ title, project: projectId })
+    .expect(201);
+
+  return response.body.task;
+};
+
+const createProjectDocument = async (token, projectId) => {
+  const response = await request(app)
+    .post('/api/documents')
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      title: 'Permission Test Document',
+      content: 'Deterministic document content used only by the permission suite.',
+      project: projectId,
+      sourceType: 'text',
+    })
+    .expect(201);
+
+  return response.body.document;
 };
 
 afterEach(clearDatabase);
@@ -335,5 +523,271 @@ describe('task API smoke tests', () => {
       .expect(401);
 
     await request(app).delete(`/api/tasks/${taskId}`).expect(401);
+  });
+});
+
+describe('project and member permission regressions', () => {
+  test('allows the owner to manage the project and its members', async () => {
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+
+    await request(app)
+      .get(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+
+    const updateResponse = await request(app)
+      .patch(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ name: 'Owner Updated Project' })
+      .expect(200);
+    expect(updateResponse.body.project.name).toBe('Owner Updated Project');
+
+    const membersResponse = await request(app)
+      .get(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+    expect(membersResponse.body.members).toEqual([
+      expect.objectContaining({ email: member.user.email }),
+    ]);
+
+    await request(app)
+      .post(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ email: outsider.user.email })
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/projects/${project._id}/members/${outsider.user.id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+
+    expect(mockDatabase.projects).toHaveLength(0);
+  });
+
+  test('lets a member read but not administer a shared project', async () => {
+    const { member, outsider, project } = await createCollaborationFixture();
+
+    await request(app)
+      .get(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(200);
+    await request(app)
+      .get(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ name: 'Forbidden Member Update' })
+      .expect(404);
+    await request(app)
+      .delete(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(404);
+    await request(app)
+      .post(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ email: outsider.user.email })
+      .expect(404);
+    await request(app)
+      .delete(`/api/projects/${project._id}/members/${member.user.id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(404);
+  });
+});
+
+describe('task permission regressions', () => {
+  test('allows the owner to view, create, edit, and delete project tasks', async () => {
+    const { owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id);
+
+    await request(app)
+      .get(`/api/tasks/project/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+    await request(app)
+      .patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ priority: 'high' })
+      .expect(200);
+    await request(app)
+      .delete(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+
+    expect(mockDatabase.tasks).toHaveLength(0);
+  });
+
+  test('allows member task creation and editing but rejects deletion without cleanup', async () => {
+    const Task = require('../src/models/Task');
+    const { member, project } = await createCollaborationFixture();
+    const task = await createProjectTask(
+      member.token,
+      project._id,
+      'Member-created task'
+    );
+
+    await request(app)
+      .get(`/api/tasks/project/${project._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(200);
+
+    const updateResponse = await request(app)
+      .patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ title: 'Member-edited task', status: 'in_progress' })
+      .expect(200);
+    expect(updateResponse.body.task.title).toBe('Member-edited task');
+
+    const deleteResponse = await request(app)
+      .delete(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(403);
+
+    expect(deleteResponse.body.message).toBe(
+      'Only the project owner can delete tasks.'
+    );
+    expect(Task.updateMany).not.toHaveBeenCalled();
+    expect(Task.findByIdAndDelete).not.toHaveBeenCalled();
+
+    await request(app)
+      .get(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(200);
+  });
+});
+
+describe('document permission regressions', () => {
+  test('allows the owner to view, create, update, and delete documents', async () => {
+    const { owner, project } = await createCollaborationFixture();
+    const document = await createProjectDocument(owner.token, project._id);
+
+    await request(app)
+      .get(`/api/documents/project/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+    await request(app)
+      .get(`/api/documents/${document._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+    await request(app)
+      .patch(`/api/documents/${document._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'Owner Updated Document' })
+      .expect(200);
+    await request(app)
+      .delete(`/api/documents/${document._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+
+    expect(mockDatabase.documents).toHaveLength(0);
+  });
+
+  test('allows member document reads but denies owner-only mutations', async () => {
+    const { member, owner, project } = await createCollaborationFixture();
+    const document = await createProjectDocument(owner.token, project._id);
+
+    await request(app)
+      .get(`/api/documents/project/${project._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(200);
+    await request(app)
+      .get(`/api/documents/${document._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(200);
+    await request(app)
+      .post('/api/documents')
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({
+        title: 'Forbidden Document',
+        content: 'Members cannot create documents.',
+        project: project._id,
+        sourceType: 'text',
+      })
+      .expect(404);
+    await request(app)
+      .patch(`/api/documents/${document._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ title: 'Forbidden Update' })
+      .expect(404);
+    await request(app)
+      .delete(`/api/documents/${document._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(404);
+
+    expect(mockDatabase.documents).toHaveLength(1);
+  });
+});
+
+describe('outsider and unauthenticated permission regressions', () => {
+  test('keeps project, task, member, and document resources hidden from outsiders', async () => {
+    const { outsider, owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id);
+    const document = await createProjectDocument(owner.token, project._id);
+
+    await request(app)
+      .get(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .expect(404);
+    await request(app)
+      .get(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .expect(404);
+    await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .send({ title: 'Forbidden outsider task', project: project._id })
+      .expect(404);
+    await request(app)
+      .get(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .expect(404);
+    await request(app)
+      .patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .send({ title: 'Forbidden outsider update' })
+      .expect(404);
+    await request(app)
+      .delete(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .expect(404);
+    await request(app)
+      .get(`/api/documents/${document._id}`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .expect(404);
+  });
+
+  test('rejects unauthenticated permission-sensitive requests', async () => {
+    const projectId = new mockMongoose.Types.ObjectId().toString();
+    const resourceId = new mockMongoose.Types.ObjectId().toString();
+
+    const requests = [
+      request(app).get(`/api/projects/${projectId}`),
+      request(app).patch(`/api/projects/${projectId}`).send({ name: 'No auth' }),
+      request(app).delete(`/api/projects/${projectId}`),
+      request(app).get(`/api/projects/${projectId}/members`),
+      request(app).post(`/api/projects/${projectId}/members`).send({ email: MEMBER.email }),
+      request(app).delete(`/api/projects/${projectId}/members/${resourceId}`),
+      request(app).post('/api/tasks').send({ title: 'No auth', project: projectId }),
+      request(app).patch(`/api/tasks/${resourceId}`).send({ title: 'No auth' }),
+      request(app).delete(`/api/tasks/${resourceId}`),
+      request(app).get(`/api/documents/project/${projectId}`),
+      request(app).post('/api/documents').send({
+        title: 'No auth',
+        content: 'No auth',
+        project: projectId,
+      }),
+      request(app).patch(`/api/documents/${resourceId}`).send({ title: 'No auth' }),
+      request(app).delete(`/api/documents/${resourceId}`),
+    ];
+
+    const responses = await Promise.all(requests);
+    responses.forEach((response) => expect(response.status).toBe(401));
   });
 });
