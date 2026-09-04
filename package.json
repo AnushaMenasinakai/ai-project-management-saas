@@ -13,7 +13,6 @@
   "license": "ISC",
   "dependencies": {
     "@google/genai": "^2.18.0",
-    "axios": "^1.19.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^16.4.7",
@@ -21,8 +20,7 @@
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^8.9.5",
-    "react-router-dom": "^7.18.2"
+    "mongoose": "^8.9.5"
   },
   "devDependencies": {
     "jest": "^30.5.1",
