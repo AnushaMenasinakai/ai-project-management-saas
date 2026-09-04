@@ -1,35 +1,23 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import api, { setAuthFailureHandler } from '../services/api';
+import { AuthContext } from './AuthContext';
 
-const AuthContext = createContext(null);
-
-export const AuthProvider = ({ children }) => {
+const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(() => localStorage.getItem('token'));
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const login = async (email, password) => {
-    const response = await api.post('/auth/login', {
-      email,
-      password,
-    });
-
+    const response = await api.post('/auth/login', { email, password });
     const newToken = response.data.token;
-
     localStorage.setItem('token', newToken);
     setToken(newToken);
     setUser(response.data.user);
-
     return response.data;
   };
 
   const register = async (name, email, password) => {
-    const response = await api.post('/auth/register', {
-      name,
-      email,
-      password,
-    });
-
+    const response = await api.post('/auth/register', { name, email, password });
     return response.data;
   };
 
@@ -39,8 +27,6 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   }, []);
 
-  const logout = clearAuth;
-
   useEffect(() => setAuthFailureHandler(clearAuth), [clearAuth]);
 
   useEffect(() => {
@@ -49,41 +35,25 @@ export const AuthProvider = ({ children }) => {
         setLoading(false);
         return;
       }
-
       try {
         const response = await api.get('/auth/me', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
-
         setUser(response.data.user);
       } catch (error) {
-        if (error.response?.status === 401) {
-          clearAuth();
-        }
+        if (error.response?.status === 401) clearAuth();
       } finally {
         setLoading(false);
       }
     };
-
     loadUser();
   }, [token, clearAuth]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        token,
-        user,
-        loading,
-        login,
-        register,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={{ token, user, loading, login, register, logout: clearAuth }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export default AuthProvider;
