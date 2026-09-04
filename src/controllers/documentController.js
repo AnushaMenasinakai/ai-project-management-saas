@@ -1,9 +1,11 @@
 const mongoose = require('mongoose');
 const Document = require('../models/Document');
-const Project = require('../models/Project');
 const DocumentChunk = require('../models/DocumentChunk');
-const chunkText = require('../utils/chunkText');
-const { generateEmbedding } = require('../services/embeddingService');
+const { prepareDocumentChunks } = require('../services/documentChunkService');
+const {
+  findProjectForCollaborator,
+  findProjectForOwner,
+} = require('../services/projectAccessService');
 
 // Create a document
 exports.createDocument = async (req, res) => {
@@ -28,10 +30,7 @@ exports.createDocument = async (req, res) => {
       });
     }
 
-    const existingProject = await Project.findOne({
-      _id: project,
-      owner: req.user.id,
-    });
+    const existingProject = await findProjectForOwner(project, req.user.id);
 
     if (!existingProject) {
       return res.status(404).json({
@@ -39,21 +38,7 @@ exports.createDocument = async (req, res) => {
       });
     }
 
-    // Split document content into chunks
-    const chunks = chunkText(content);
-
-    const preparedChunks = [];
-
-    for (let index = 0; index < chunks.length; index += 1) {
-      const chunkContent = chunks[index];
-      const embedding = await generateEmbedding(chunkContent);
-
-      preparedChunks.push({
-        content: chunkContent,
-        chunkIndex: index,
-        embedding,
-      });
-    }
+    const preparedChunks = await prepareDocumentChunks(content);
 
     const session = await mongoose.startSession();
     let document;
@@ -106,10 +91,7 @@ exports.getProjectDocuments = async (req, res) => {
       });
     }
 
-    const project = await Project.findOne({
-      _id: projectId,
-      $or: [{ owner: req.user.id }, { members: req.user.id }],
-    });
+    const project = await findProjectForCollaborator(projectId, req.user.id);
 
     if (!project) {
       return res.status(404).json({
@@ -152,10 +134,7 @@ exports.getDocument = async (req, res) => {
       });
     }
 
-    const project = await Project.findOne({
-      _id: document.project,
-      $or: [{ owner: req.user.id }, { members: req.user.id }],
-    });
+    const project = await findProjectForCollaborator(document.project, req.user.id);
 
     if (!project) {
       return res.status(404).json({
@@ -195,10 +174,7 @@ exports.updateDocument = async (req, res) => {
       });
     }
 
-    const project = await Project.findOne({
-      _id: document.project,
-      owner: req.user.id,
-    });
+    const project = await findProjectForOwner(document.project, req.user.id);
 
     if (!project) {
       return res.status(404).json({
@@ -244,21 +220,12 @@ exports.updateDocument = async (req, res) => {
         }
       );
     } else {
-      const chunks = chunkText(content);
-      const chunkDocuments = [];
-
-      for (let index = 0; index < chunks.length; index += 1) {
-        const chunkContent = chunks[index];
-        const embedding = await generateEmbedding(chunkContent);
-
-        chunkDocuments.push({
-          document: document._id,
-          project: document.project,
-          content: chunkContent,
-          chunkIndex: index,
-          embedding,
-        });
-      }
+      const preparedChunks = await prepareDocumentChunks(content);
+      const chunkDocuments = preparedChunks.map((chunk) => ({
+        document: document._id,
+        project: document.project,
+        ...chunk,
+      }));
 
       const session = await mongoose.startSession();
 
@@ -318,10 +285,7 @@ exports.deleteDocument = async (req, res) => {
       });
     }
 
-    const project = await Project.findOne({
-      _id: document.project,
-      owner: req.user.id,
-    });
+    const project = await findProjectForOwner(document.project, req.user.id);
 
     if (!project) {
       return res.status(404).json({

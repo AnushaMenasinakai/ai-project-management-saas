@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
-const Project = require('../models/Project');
 const User = require('../models/User');
+const {
+  findProjectForCollaborator,
+  findProjectForOwner,
+} = require('../services/projectAccessService');
 
 // Add a member to a project
 exports.addMember = async (req, res) => {
@@ -22,10 +25,7 @@ exports.addMember = async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    const project = await Project.findOne({
-      _id: id,
-      owner: req.user.id,
-    });
+    const project = await findProjectForOwner(id, req.user.id);
 
     if (!project) {
       return res.status(404).json({
@@ -81,10 +81,8 @@ exports.getMembers = async (req, res) => {
       });
     }
 
-    const project = await Project.findOne({
-      _id: id,
-      $or: [{ owner: req.user.id }, { members: req.user.id }],
-    }).populate('members', 'name email');
+    const project = await findProjectForCollaborator(id, req.user.id)
+      .populate('members', 'name email');
 
     if (!project) {
       return res.status(404).json({
@@ -121,10 +119,7 @@ exports.removeMember = async (req, res) => {
       });
     }
 
-    const project = await Project.findOne({
-      _id: id,
-      owner: req.user.id,
-    });
+    const project = await findProjectForOwner(id, req.user.id);
 
     if (!project) {
       return res.status(404).json({

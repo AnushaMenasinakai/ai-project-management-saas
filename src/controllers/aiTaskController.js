@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
-const Project = require('../models/Project');
 const Task = require('../models/Task');
 const { generateProjectTasks } = require('../services/aiTaskService');
+const { findProjectForCollaborator } = require('../services/projectAccessService');
 
 exports.generateTasks = async (req, res) => {
   try {
@@ -13,10 +13,7 @@ exports.generateTasks = async (req, res) => {
       });
     }
 
-    const project = await Project.findOne({
-      _id: projectId,
-      $or: [{ owner: req.user.id }, { members: req.user.id }],
-    });
+    const project = await findProjectForCollaborator(projectId, req.user.id);
 
     if (!project) {
       return res.status(404).json({

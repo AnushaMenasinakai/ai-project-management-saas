@@ -3,6 +3,10 @@ const Project = require('../models/Project');
 const Task = require('../models/Task');
 const Document = require('../models/Document');
 const DocumentChunk = require('../models/DocumentChunk');
+const {
+  findProjectForCollaborator,
+  findProjectForOwner,
+} = require('../services/projectAccessService');
 
 const allowedUpdateFields = ['name', 'description', 'status', 'startDate', 'dueDate'];
 
@@ -87,10 +91,7 @@ const getProjectById = async (req, res) => {
       return res.status(404).json({ message: 'Project not found.' });
     }
 
-    const project = await Project.findOne({
-      _id: id,
-      $or: [{ owner: req.user.id }, { members: req.user.id }],
-    });
+    const project = await findProjectForCollaborator(id, req.user.id);
 
     if (!project) {
       return res.status(404).json({ message: 'Project not found.' });
@@ -158,7 +159,7 @@ const deleteProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found.' });
     }
 
-    const project = await Project.findOne({ _id: id, owner: req.user.id });
+    const project = await findProjectForOwner(id, req.user.id);
 
     if (!project) {
       return res.status(404).json({ message: 'Project not found.' });

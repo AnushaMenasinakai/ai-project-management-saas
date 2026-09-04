@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
-const Project = require('../models/Project');
 const { generateRagAnswer } = require('../services/ragService');
+const { findProjectForCollaborator } = require('../services/projectAccessService');
 
 // Ask a question about a project
 exports.askProject = async (req, res) => {
@@ -20,10 +20,7 @@ exports.askProject = async (req, res) => {
       });
     }
 
-    const project = await Project.findOne({
-      _id: projectId,
-      $or: [{ owner: req.user.id }, { members: req.user.id }],
-    });
+    const project = await findProjectForCollaborator(projectId, req.user.id);
 
     if (!project) {
       return res.status(404).json({
