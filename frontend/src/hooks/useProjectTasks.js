@@ -3,6 +3,11 @@ import { filterAndSortTasks, normalizeDependencyIds } from '../features/project-
 import api from '../services/api';
 
 const TASK_STATUSES = new Set(['todo', 'in_progress', 'completed']);
+const TASK_STATUS_LABELS = {
+  todo: 'To Do',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+};
 
 const useProjectTasks = (projectId) => {
   const [resource, setResource] = useState({ projectId: null, tasks: [], error: '' });
@@ -18,6 +23,7 @@ const useProjectTasks = (projectId) => {
   const [editValues, setEditValues] = useState({ title: '', description: '', status: 'todo', priority: 'medium', dueDate: '', assignedTo: '', dependencies: [] });
   const [pendingTaskMoves, setPendingTaskMoves] = useState(() => new Set());
   const [taskMoveError, setTaskMoveError] = useState('');
+  const [taskMoveAnnouncement, setTaskMoveAnnouncement] = useState('');
   const pendingTaskMovesRef = useRef(new Set());
 
   const refreshTasks = useCallback(async () => {
@@ -177,6 +183,7 @@ const useProjectTasks = (projectId) => {
     pendingTaskMovesRef.current.add(taskId);
     setPendingTaskMoves(new Set(pendingTaskMovesRef.current));
     setTaskMoveError('');
+    setTaskMoveAnnouncement('');
 
     try {
       await api.patch(`/tasks/${taskId}`, { status: nextStatus });
@@ -188,16 +195,18 @@ const useProjectTasks = (projectId) => {
           ))
           : current.tasks,
       }));
+      setTaskMoveAnnouncement(`${task.title} moved to ${TASK_STATUS_LABELS[nextStatus]}.`);
 
       const refreshedTasks = await refreshTasks();
       if (refreshedTasks === null) {
-        setTaskMoveError('Task status was updated, but the latest task details could not be refreshed.');
+        setTaskMoveError(`${task.title} status was updated, but the latest task details could not be refreshed.`);
       }
 
       return true;
     } catch (error) {
       console.error('Update task status error:', error);
-      setTaskMoveError(error.response?.data?.message || 'Failed to move task.');
+      const message = error.response?.data?.message || 'Failed to move task.';
+      setTaskMoveError(`Could not move ${task.title}. ${message}`);
       return false;
     } finally {
       pendingTaskMovesRef.current.delete(taskId);
@@ -237,6 +246,7 @@ const useProjectTasks = (projectId) => {
     updateTaskStatus,
     pendingTaskMoves,
     taskMoveError,
+    taskMoveAnnouncement,
     refreshTasks,
   };
 };

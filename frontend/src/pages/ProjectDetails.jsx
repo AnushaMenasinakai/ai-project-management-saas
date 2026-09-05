@@ -92,6 +92,7 @@ const ProjectDetails = () => {
     updateTaskStatus,
     pendingTaskMoves,
     taskMoveError,
+    taskMoveAnnouncement,
     refreshTasks,
   } = useProjectTasks(id);
 
@@ -355,6 +356,7 @@ return (
       onMoveTask={updateTaskStatus}
       pendingTaskMoves={pendingTaskMoves}
       taskMoveError={taskMoveError}
+      taskMoveAnnouncement={taskMoveAnnouncement}
       onUpdate={updateTask}
       onEditChange={setTaskEditValue}
       onDependenciesChange={setEditDependencies}

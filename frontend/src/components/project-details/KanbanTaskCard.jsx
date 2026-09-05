@@ -11,6 +11,7 @@ const KanbanTaskCard = ({
   isPending,
   onEdit,
   onDelete,
+  onMoveTask,
 }) => {
   const { ref, handleRef, isDragging } = useDraggable({
     id: task._id,
@@ -72,6 +73,22 @@ const KanbanTaskCard = ({
         </div>
       )}
     </dl>
+
+    <label className="kanban-task-card__status-control">
+      <span>Move to</span>
+      <select
+        value={task.status}
+        aria-label={`Move ${task.title} to status`}
+        disabled={isPending}
+        onChange={(event) => onMoveTask(task._id, event.target.value)}
+      >
+        <option value="todo">To Do</option>
+        <option value="in_progress">In Progress</option>
+        <option value="completed">Completed</option>
+      </select>
+    </label>
+
+    {isPending && <p className="kanban-task-card__pending-message">Updating status…</p>}
 
     {task.dependencies?.length > 0 && (
       <p className="kanban-task-card__dependency-count">

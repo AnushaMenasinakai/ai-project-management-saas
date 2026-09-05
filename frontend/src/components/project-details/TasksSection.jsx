@@ -38,6 +38,7 @@ const TasksSection = ({
   onMoveTask,
   pendingTaskMoves,
   taskMoveError,
+  taskMoveAnnouncement,
   onUpdate,
   onEditChange,
   onDependenciesChange,
@@ -45,6 +46,9 @@ const TasksSection = ({
   onGenerate,
 }) => {
   const [viewMode, setViewMode] = useState('list');
+  const taskFiltersActive = Boolean(
+    filters.search.trim() || filters.status !== 'all' || filters.priority !== 'all',
+  );
   const editFromBoard = (task) => {
     setViewMode('list');
     onStartEdit(task);
@@ -136,12 +140,16 @@ const TasksSection = ({
     {viewMode === 'board' && !tasksLoading && !tasksError && (
       <>
         {taskMoveError && <Alert className="task-move-alert">{taskMoveError}</Alert>}
+        <div className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+          {taskMoveAnnouncement}
+        </div>
         <KanbanBoard
           tasks={filteredTasks}
           isProjectOwner={isProjectOwner}
           priorityVariant={priorityVariant}
           formatLabel={formatLabel}
           pendingTaskMoves={pendingTaskMoves}
+          filtersActive={taskFiltersActive}
           onEdit={editFromBoard}
           onDelete={onDelete}
           onMoveTask={onMoveTask}

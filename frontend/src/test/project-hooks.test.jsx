@@ -92,6 +92,7 @@ describe('project resource hooks', () => {
     expect(result.current.tasks).toEqual([refreshedTask]);
     expect(result.current.pendingTaskMoves.size).toBe(0);
     expect(result.current.taskMoveError).toBe('');
+    expect(result.current.taskMoveAnnouncement).toBe('Task moved to In Progress.');
   });
 
   test('does not request same-status, invalid, or missing task moves', async () => {
@@ -119,7 +120,7 @@ describe('project resource hooks', () => {
     await act(async () => result.current.updateTaskStatus('task-1', 'completed'));
 
     expect(result.current.tasks[0].status).toBe('todo');
-    expect(result.current.taskMoveError).toBe('Move rejected.');
+    expect(result.current.taskMoveError).toBe('Could not move Task. Move rejected.');
     expect(result.current.pendingTaskMoves.size).toBe(0);
     consoleSpy.mockRestore();
   });
@@ -137,7 +138,8 @@ describe('project resource hooks', () => {
     await act(async () => result.current.updateTaskStatus('task-1', 'completed'));
 
     expect(result.current.tasks[0].status).toBe('completed');
-    expect(result.current.taskMoveError).toMatch(/status was updated/i);
+    expect(result.current.taskMoveError).toBe('Task status was updated, but the latest task details could not be refreshed.');
+    expect(result.current.taskMoveAnnouncement).toBe('Task moved to Completed.');
     expect(result.current.pendingTaskMoves.size).toBe(0);
     consoleSpy.mockRestore();
   });

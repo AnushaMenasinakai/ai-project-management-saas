@@ -34,6 +34,10 @@ const renderTasks = ({
   filteredTasks = tasks,
   isProjectOwner = true,
   onMoveTask = vi.fn(),
+  pendingTaskMoves = new Set(),
+  taskMoveError = '',
+  taskMoveAnnouncement = '',
+  filters = { search: '', status: 'all', priority: 'all', sort: 'created_desc' },
 } = {}) => render(
   <TasksSection
     tasks={tasks}
@@ -42,7 +46,7 @@ const renderTasks = ({
     isProjectOwner={isProjectOwner}
     tasksLoading={false}
     tasksError=""
-    filters={{ search: '', status: 'all', priority: 'all', sort: 'created_desc' }}
+    filters={filters}
     showTaskForm={false}
     createValues={{ title: '', description: '', status: 'todo', priority: 'medium', dueDate: '', assignedTo: '' }}
     creatingTask={false}
@@ -64,8 +68,9 @@ const renderTasks = ({
     onStartEdit={vi.fn()}
     onDelete={vi.fn()}
     onMoveTask={onMoveTask}
-    pendingTaskMoves={new Set()}
-    taskMoveError=""
+    pendingTaskMoves={pendingTaskMoves}
+    taskMoveError={taskMoveError}
+    taskMoveAnnouncement={taskMoveAnnouncement}
     onUpdate={vi.fn()}
     onEditChange={vi.fn()}
     onDependenciesChange={vi.fn()}
@@ -95,13 +100,16 @@ describe('Kanban board foundation', () => {
   });
 
   test('renders the already filtered collection while keeping empty columns visible', () => {
-    renderTasks({ filteredTasks: [tasks[1]] });
+    renderTasks({
+      filteredTasks: [tasks[1]],
+      filters: { search: 'build', status: 'all', priority: 'all', sort: 'created_desc' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Board' }));
 
     expect(screen.queryByText('Plan release')).not.toBeInTheDocument();
     expect(screen.getByText('Build feature')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'To Do' })).getByText('No visible tasks')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Completed' })).getByText('No visible tasks')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'To Do' })).getByText('No matching tasks.')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Completed' })).getByText('No matching tasks.')).toBeInTheDocument();
   });
 
   test('shows Edit and Delete actions to the project owner', () => {
@@ -110,6 +118,7 @@ describe('Kanban board foundation', () => {
 
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Move Plan release to status' })).toHaveValue('todo');
   });
 
   test('keeps Edit visible while hiding Delete from project members', () => {
@@ -118,6 +127,50 @@ describe('Kanban board foundation', () => {
 
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Move Plan release to status' })).toBeEnabled();
+  });
+
+  test('uses the existing movement callback from the accessible status selector', () => {
+    const onMoveTask = vi.fn();
+    renderTasks({ filteredTasks: [tasks[0]], onMoveTask });
+    fireEvent.click(screen.getByRole('button', { name: 'Board' }));
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Move Plan release to status' }), {
+      target: { value: 'completed' },
+    });
+
+    expect(onMoveTask).toHaveBeenCalledWith('todo-1', 'completed');
+  });
+
+  test('disables only the pending task movement controls and exposes busy feedback', () => {
+    renderTasks({ filteredTasks: [tasks[0], tasks[1]], pendingTaskMoves: new Set(['todo-1']) });
+    fireEvent.click(screen.getByRole('button', { name: 'Board' }));
+
+    expect(screen.getByRole('button', { name: 'Move Plan release' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Move Plan release to status' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Move Build feature to status' })).toBeEnabled();
+    expect(screen.getByText('Updating status…')).toBeInTheDocument();
+  });
+
+  test('keeps useful board, column, and drag-handle accessible names', () => {
+    renderTasks({ filteredTasks: [tasks[0]] });
+    fireEvent.click(screen.getByRole('button', { name: 'Board' }));
+
+    expect(screen.getByRole('region', { name: 'Project task board' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'To Do' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move Plan release' })).toBeInTheDocument();
+  });
+
+  test('renders movement errors as alerts and successful movement feedback as status', () => {
+    renderTasks({
+      filteredTasks: [tasks[0]],
+      taskMoveError: 'Could not move Plan release.',
+      taskMoveAnnouncement: 'Plan release moved to Completed.',
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Board' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not move Plan release.');
+    expect(screen.getByRole('status')).toHaveTextContent('Plan release moved to Completed.');
   });
 
   test('wires a valid cross-column drop to the task status updater', () => {

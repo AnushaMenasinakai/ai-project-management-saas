@@ -14,6 +14,7 @@ const KanbanBoard = ({
   priorityVariant,
   formatLabel,
   pendingTaskMoves = new Set(),
+  filtersActive = false,
   onEdit,
   onDelete,
   onMoveTask,
@@ -26,7 +27,7 @@ const KanbanBoard = ({
 
   return (
     <DragDropProvider onDragEnd={handleDragEnd}>
-      <div className="kanban-board" aria-label="Project task board">
+      <div className="kanban-board" role="region" aria-label="Project task board">
         {columns.map(({ status, label }) => (
           <KanbanColumn
             key={status}
@@ -37,8 +38,10 @@ const KanbanBoard = ({
             priorityVariant={priorityVariant}
             formatLabel={formatLabel}
             pendingTaskMoves={pendingTaskMoves}
+            emptyMessage={filtersActive ? 'No matching tasks.' : 'No tasks in this status.'}
             onEdit={onEdit}
             onDelete={onDelete}
+            onMoveTask={onMoveTask}
           />
         ))}
       </div>

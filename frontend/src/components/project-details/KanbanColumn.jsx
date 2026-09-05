@@ -9,8 +9,10 @@ const KanbanColumn = ({
   priorityVariant,
   formatLabel,
   pendingTaskMoves,
+  emptyMessage,
   onEdit,
   onDelete,
+  onMoveTask,
 }) => {
   const { ref, isDropTarget } = useDroppable({
     id: `kanban-column-${status}`,
@@ -33,8 +35,10 @@ const KanbanColumn = ({
         </span>
       </div>
 
+      {isDropTarget && <p className="kanban-column__drop-hint">Drop task here</p>}
+
       <div className="kanban-column__tasks">
-        {tasks.length === 0 && <p className="kanban-column__empty">No visible tasks</p>}
+        {tasks.length === 0 && <p className="kanban-column__empty">{emptyMessage}</p>}
         {tasks.map((task) => (
           <KanbanTaskCard
             key={task._id}
@@ -45,6 +49,7 @@ const KanbanColumn = ({
             isPending={pendingTaskMoves.has(task._id)}
             onEdit={onEdit}
             onDelete={onDelete}
+            onMoveTask={onMoveTask}
           />
         ))}
       </div>
