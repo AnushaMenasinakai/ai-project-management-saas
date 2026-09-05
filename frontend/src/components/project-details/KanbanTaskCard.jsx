@@ -1,3 +1,4 @@
+import { useDraggable } from '@dnd-kit/react';
 import Badge from '../Badge';
 import Button from '../Button';
 import Card from '../Card';
@@ -7,12 +8,45 @@ const KanbanTaskCard = ({
   isProjectOwner,
   priorityVariant,
   formatLabel,
+  isPending,
   onEdit,
   onDelete,
-}) => (
-  <Card as="article" className="kanban-task-card">
+}) => {
+  const { ref, handleRef, isDragging } = useDraggable({
+    id: task._id,
+    data: { taskId: task._id, status: task.status },
+    type: 'kanban-task',
+    disabled: isPending,
+  });
+
+  return (
+  <Card
+    ref={ref}
+    as="article"
+    className={`kanban-task-card${isDragging ? ' kanban-task-card--dragging' : ''}${isPending ? ' kanban-task-card--pending' : ''}`}
+    aria-busy={isPending || undefined}
+  >
     <div className="kanban-task-card__header">
-      <h4>{task.title}</h4>
+      <div className="kanban-task-card__title-row">
+        <h4>{task.title}</h4>
+        <button
+          ref={handleRef}
+          type="button"
+          className="kanban-task-card__drag-handle"
+          aria-label={`Move ${task.title}`}
+          title={`Move ${task.title}`}
+          disabled={isPending}
+        >
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="6" cy="5" r="1.4" />
+            <circle cx="14" cy="5" r="1.4" />
+            <circle cx="6" cy="10" r="1.4" />
+            <circle cx="14" cy="10" r="1.4" />
+            <circle cx="6" cy="15" r="1.4" />
+            <circle cx="14" cy="15" r="1.4" />
+          </svg>
+        </button>
+      </div>
       <Badge variant={priorityVariant(task.priority)}>
         {formatLabel(task.priority)} priority
       </Badge>
@@ -46,12 +80,13 @@ const KanbanTaskCard = ({
     )}
 
     <div className="kanban-task-card__actions">
-      <Button variant="secondary" onClick={() => onEdit(task)}>Edit</Button>
+      <Button variant="secondary" disabled={isPending} onClick={() => onEdit(task)}>Edit</Button>
       {isProjectOwner && (
-        <Button variant="danger-secondary" onClick={() => onDelete(task._id)}>Delete</Button>
+        <Button variant="danger-secondary" disabled={isPending} onClick={() => onDelete(task._id)}>Delete</Button>
       )}
     </div>
   </Card>
-);
+  );
+};
 
 export default KanbanTaskCard;

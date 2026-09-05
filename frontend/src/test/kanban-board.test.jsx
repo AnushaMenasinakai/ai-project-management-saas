@@ -1,6 +1,28 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 import TasksSection from '../components/project-details/TasksSection';
+import { getKanbanMove } from '../features/project-details/projectDetailsUtils';
+
+vi.mock('@dnd-kit/react', () => ({
+  DragDropProvider: ({ children, onDragEnd }) => (
+    <>
+      <button
+        type="button"
+        aria-label="Simulate cross-column drop"
+        onClick={() => onDragEnd({
+          canceled: false,
+          operation: {
+            source: { data: { taskId: 'todo-1', status: 'todo' } },
+            target: { data: { status: 'in_progress' } },
+          },
+        })}
+      />
+      {children}
+    </>
+  ),
+  useDroppable: () => ({ ref: vi.fn(), isDropTarget: false }),
+  useDraggable: () => ({ ref: vi.fn(), handleRef: vi.fn(), isDragging: false }),
+}));
 
 const tasks = [
   { _id: 'todo-1', title: 'Plan release', status: 'todo', priority: 'high', dependencies: [] },
@@ -11,6 +33,7 @@ const tasks = [
 const renderTasks = ({
   filteredTasks = tasks,
   isProjectOwner = true,
+  onMoveTask = vi.fn(),
 } = {}) => render(
   <TasksSection
     tasks={tasks}
@@ -40,6 +63,9 @@ const renderTasks = ({
     onCancelCreate={vi.fn()}
     onStartEdit={vi.fn()}
     onDelete={vi.fn()}
+    onMoveTask={onMoveTask}
+    pendingTaskMoves={new Set()}
+    taskMoveError=""
     onUpdate={vi.fn()}
     onEditChange={vi.fn()}
     onDependenciesChange={vi.fn()}
@@ -92,5 +118,39 @@ describe('Kanban board foundation', () => {
 
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+  });
+
+  test('wires a valid cross-column drop to the task status updater', () => {
+    const onMoveTask = vi.fn();
+    renderTasks({ onMoveTask });
+    fireEvent.click(screen.getByRole('button', { name: 'Board' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Simulate cross-column drop' }));
+
+    expect(onMoveTask).toHaveBeenCalledWith('todo-1', 'in_progress');
+  });
+
+  test('rejects same-column, canceled, and outside-column drops', () => {
+    expect(getKanbanMove({
+      canceled: false,
+      operation: {
+        source: { data: { taskId: 'task-1', status: 'todo' } },
+        target: { data: { status: 'todo' } },
+      },
+    })).toBeNull();
+    expect(getKanbanMove({
+      canceled: true,
+      operation: {
+        source: { data: { taskId: 'task-1', status: 'todo' } },
+        target: { data: { status: 'completed' } },
+      },
+    })).toBeNull();
+    expect(getKanbanMove({
+      canceled: false,
+      operation: {
+        source: { data: { taskId: 'task-1', status: 'todo' } },
+        target: null,
+      },
+    })).toBeNull();
   });
 });

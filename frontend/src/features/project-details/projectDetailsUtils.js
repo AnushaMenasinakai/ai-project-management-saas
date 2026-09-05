@@ -41,6 +41,21 @@ export const groupTasksByStatus = (tasks = []) => {
   return groups;
 };
 
+export const getKanbanMove = (event) => {
+  if (event.canceled) return null;
+
+  const taskId = event.operation.source?.data?.taskId;
+  const currentStatus = event.operation.source?.data?.status;
+  const nextStatus = event.operation.target?.data?.status;
+  const validStatuses = ['todo', 'in_progress', 'completed'];
+
+  if (!taskId || !validStatuses.includes(nextStatus) || currentStatus === nextStatus) {
+    return null;
+  }
+
+  return { taskId, nextStatus };
+};
+
 export const filterAndSortTasks = (tasks, { search, status, priority, sort }) => {
   const searchTerm = search.trim().toLowerCase();
   const filteredTasks = tasks.filter((task) => {

@@ -35,6 +35,9 @@ const TasksSection = ({
   onCancelCreate,
   onStartEdit,
   onDelete,
+  onMoveTask,
+  pendingTaskMoves,
+  taskMoveError,
   onUpdate,
   onEditChange,
   onDependenciesChange,
@@ -131,14 +134,19 @@ const TasksSection = ({
         />
     ))}
     {viewMode === 'board' && !tasksLoading && !tasksError && (
-      <KanbanBoard
-        tasks={filteredTasks}
-        isProjectOwner={isProjectOwner}
-        priorityVariant={priorityVariant}
-        formatLabel={formatLabel}
-        onEdit={editFromBoard}
-        onDelete={onDelete}
-      />
+      <>
+        {taskMoveError && <Alert className="task-move-alert">{taskMoveError}</Alert>}
+        <KanbanBoard
+          tasks={filteredTasks}
+          isProjectOwner={isProjectOwner}
+          priorityVariant={priorityVariant}
+          formatLabel={formatLabel}
+          pendingTaskMoves={pendingTaskMoves}
+          onEdit={editFromBoard}
+          onDelete={onDelete}
+          onMoveTask={onMoveTask}
+        />
+      </>
     )}
     {showTaskForm && (
       <form className="workspace-form task-create-form" onSubmit={onCreate}>

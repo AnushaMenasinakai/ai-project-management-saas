@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { filterAndSortTasks, normalizeDependencyIds } from '../features/project-details/projectDetailsUtils';
 import api from '../services/api';
+
+const TASK_STATUSES = new Set(['todo', 'in_progress', 'completed']);
 
 const useProjectTasks = (projectId) => {
   const [resource, setResource] = useState({ projectId: null, tasks: [], error: '' });
@@ -14,6 +16,9 @@ const useProjectTasks = (projectId) => {
   const [editTaskError, setEditTaskError] = useState('');
   const [dependencyError, setDependencyError] = useState('');
   const [editValues, setEditValues] = useState({ title: '', description: '', status: 'todo', priority: 'medium', dueDate: '', assignedTo: '', dependencies: [] });
+  const [pendingTaskMoves, setPendingTaskMoves] = useState(() => new Set());
+  const [taskMoveError, setTaskMoveError] = useState('');
+  const pendingTaskMovesRef = useRef(new Set());
 
   const refreshTasks = useCallback(async () => {
     setResource((current) => ({ ...current, projectId, error: '', loading: true }));
@@ -157,6 +162,49 @@ const useProjectTasks = (projectId) => {
     }
   };
 
+  const updateTaskStatus = async (taskId, nextStatus) => {
+    const currentTasks = resource.projectId === projectId ? resource.tasks : [];
+    const task = currentTasks.find((item) => item._id === taskId);
+
+    if (!TASK_STATUSES.has(nextStatus) || !task || task.status === nextStatus) {
+      return false;
+    }
+
+    if (pendingTaskMovesRef.current.has(taskId)) {
+      return false;
+    }
+
+    pendingTaskMovesRef.current.add(taskId);
+    setPendingTaskMoves(new Set(pendingTaskMovesRef.current));
+    setTaskMoveError('');
+
+    try {
+      await api.patch(`/tasks/${taskId}`, { status: nextStatus });
+      setResource((current) => ({
+        ...current,
+        tasks: current.projectId === projectId
+          ? current.tasks.map((item) => (
+            item._id === taskId ? { ...item, status: nextStatus } : item
+          ))
+          : current.tasks,
+      }));
+
+      const refreshedTasks = await refreshTasks();
+      if (refreshedTasks === null) {
+        setTaskMoveError('Task status was updated, but the latest task details could not be refreshed.');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Update task status error:', error);
+      setTaskMoveError(error.response?.data?.message || 'Failed to move task.');
+      return false;
+    } finally {
+      pendingTaskMovesRef.current.delete(taskId);
+      setPendingTaskMoves(new Set(pendingTaskMovesRef.current));
+    }
+  };
+
   const tasks = resource.projectId === projectId ? resource.tasks : [];
   const tasksLoading = resource.projectId !== projectId || resource.loading === true;
 
@@ -186,6 +234,9 @@ const useProjectTasks = (projectId) => {
     createTask,
     updateTask,
     deleteTask,
+    updateTaskStatus,
+    pendingTaskMoves,
+    taskMoveError,
     refreshTasks,
   };
 };
