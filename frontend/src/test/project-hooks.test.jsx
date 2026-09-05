@@ -179,4 +179,22 @@ describe('project resource hooks', () => {
 
     expect(result.current.pendingTaskMoves.size).toBe(0);
   });
+
+  test('keeps an active status filter when a moved task no longer matches it', async () => {
+    const originalTask = { _id: 'task-1', title: 'Filtered task', status: 'todo' };
+    const movedTask = { ...originalTask, status: 'in_progress' };
+    api.get
+      .mockResolvedValueOnce({ data: { tasks: [originalTask] } })
+      .mockResolvedValueOnce({ data: { tasks: [movedTask] } });
+    api.patch.mockResolvedValue({ data: { task: movedTask } });
+    const { result } = renderHook(() => useProjectTasks('project-1'));
+    await waitFor(() => expect(result.current.tasksLoading).toBe(false));
+
+    act(() => result.current.setFilter('status', 'todo'));
+    await act(async () => result.current.updateTaskStatus('task-1', 'in_progress'));
+
+    expect(result.current.filters.status).toBe('todo');
+    expect(result.current.tasks[0].status).toBe('in_progress');
+    expect(result.current.filteredTasks).toEqual([]);
+  });
 });

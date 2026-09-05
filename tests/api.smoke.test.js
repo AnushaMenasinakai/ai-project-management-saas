@@ -616,6 +616,12 @@ describe('task permission regressions', () => {
       .set('Authorization', `Bearer ${owner.token}`)
       .send({ priority: 'high' })
       .expect(200);
+    const statusResponse = await request(app)
+      .patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ status: 'in_progress' })
+      .expect(200);
+    expect(statusResponse.body.task.status).toBe('in_progress');
     await request(app)
       .delete(`/api/tasks/${task._id}`)
       .set('Authorization', `Bearer ${owner.token}`)
@@ -644,6 +650,13 @@ describe('task permission regressions', () => {
       .send({ title: 'Member-edited task', status: 'in_progress' })
       .expect(200);
     expect(updateResponse.body.task.title).toBe('Member-edited task');
+
+    const statusResponse = await request(app)
+      .patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ status: 'completed' })
+      .expect(200);
+    expect(statusResponse.body.task.status).toBe('completed');
 
     const deleteResponse = await request(app)
       .delete(`/api/tasks/${task._id}`)
