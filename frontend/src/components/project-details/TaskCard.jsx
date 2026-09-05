@@ -17,6 +17,7 @@ const TaskCard = ({
   priorityVariant,
   formatLabel,
   onStartEdit,
+  onOpenComments,
   onDelete,
   onUpdate,
   onEditChange,
@@ -50,6 +51,14 @@ const TaskCard = ({
       </div>
     )}
     <div className="task-card__actions">
+      <Button
+        variant="secondary"
+        type="button"
+        aria-label={`View comments for ${task.title}`}
+        onClick={() => onOpenComments(task)}
+      >
+        Comments
+      </Button>
       <Button variant="secondary" type="button" onClick={() => onStartEdit(task)}>Edit Task</Button>
       {isProjectOwner && (
         <Button variant="danger-secondary" type="button" onClick={() => onDelete(task._id)}>Delete Task</Button>

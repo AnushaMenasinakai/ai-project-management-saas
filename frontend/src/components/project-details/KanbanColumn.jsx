@@ -11,6 +11,7 @@ const KanbanColumn = ({
   pendingTaskMoves,
   emptyMessage,
   onEdit,
+  onOpenComments,
   onDelete,
   onMoveTask,
 }) => {
@@ -48,6 +49,7 @@ const KanbanColumn = ({
             formatLabel={formatLabel}
             isPending={pendingTaskMoves.has(task._id)}
             onEdit={onEdit}
+            onOpenComments={onOpenComments}
             onDelete={onDelete}
             onMoveTask={onMoveTask}
           />

@@ -6,6 +6,7 @@ import LoadingState from '../LoadingState';
 import AITaskGenerator from './AITaskGenerator';
 import KanbanBoard from './KanbanBoard';
 import TaskCard from './TaskCard';
+import TaskCommentsPanel from './TaskCommentsPanel';
 
 const TasksSection = ({
   tasks,
@@ -46,6 +47,7 @@ const TasksSection = ({
   onGenerate,
 }) => {
   const [viewMode, setViewMode] = useState('list');
+  const [activeCommentsTask, setActiveCommentsTask] = useState(null);
   const taskFiltersActive = Boolean(
     filters.search.trim() || filters.status !== 'all' || filters.priority !== 'all',
   );
@@ -107,6 +109,13 @@ const TasksSection = ({
         </select>
       </div>
     </div>
+    {activeCommentsTask && (
+      <TaskCommentsPanel
+        key={activeCommentsTask._id}
+        task={activeCommentsTask}
+        onClose={() => setActiveCommentsTask(null)}
+      />
+    )}
     {viewMode === 'list' && (
       <div className="task-list-heading"><p className="section-eyebrow">Your tasks</p><span>{filteredTasks.length} shown</span></div>
     )}
@@ -130,6 +139,7 @@ const TasksSection = ({
           priorityVariant={priorityVariant}
           formatLabel={formatLabel}
           onStartEdit={onStartEdit}
+          onOpenComments={setActiveCommentsTask}
           onDelete={onDelete}
           onUpdate={onUpdate}
           onEditChange={onEditChange}
@@ -151,6 +161,7 @@ const TasksSection = ({
           pendingTaskMoves={pendingTaskMoves}
           filtersActive={taskFiltersActive}
           onEdit={editFromBoard}
+          onOpenComments={setActiveCommentsTask}
           onDelete={onDelete}
           onMoveTask={onMoveTask}
         />

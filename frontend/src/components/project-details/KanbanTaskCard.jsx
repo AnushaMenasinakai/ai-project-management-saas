@@ -10,6 +10,7 @@ const KanbanTaskCard = ({
   formatLabel,
   isPending,
   onEdit,
+  onOpenComments,
   onDelete,
   onMoveTask,
 }) => {
@@ -97,6 +98,13 @@ const KanbanTaskCard = ({
     )}
 
     <div className="kanban-task-card__actions">
+      <Button
+        variant="secondary"
+        aria-label={`View comments for ${task.title}`}
+        onClick={() => onOpenComments(task)}
+      >
+        Comments
+      </Button>
       <Button variant="secondary" disabled={isPending} onClick={() => onEdit(task)}>Edit</Button>
       {isProjectOwner && (
         <Button variant="danger-secondary" disabled={isPending} onClick={() => onDelete(task._id)}>Delete</Button>

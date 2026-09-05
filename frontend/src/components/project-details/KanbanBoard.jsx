@@ -16,6 +16,7 @@ const KanbanBoard = ({
   pendingTaskMoves = new Set(),
   filtersActive = false,
   onEdit,
+  onOpenComments,
   onDelete,
   onMoveTask,
 }) => {
@@ -40,6 +41,7 @@ const KanbanBoard = ({
             pendingTaskMoves={pendingTaskMoves}
             emptyMessage={filtersActive ? 'No matching tasks.' : 'No tasks in this status.'}
             onEdit={onEdit}
+            onOpenComments={onOpenComments}
             onDelete={onDelete}
             onMoveTask={onMoveTask}
           />
