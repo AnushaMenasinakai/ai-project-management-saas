@@ -10,6 +10,7 @@ const projectMemberRoutes = require('./routes/projectMemberRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const documentRoutes = require('./routes/documentRoutes');
 const aiRoutes = require('./routes/aiRoutes');
+const commentRoutes = require('./routes/commentRoutes');
 
 
 const app = express();
@@ -40,6 +41,7 @@ app.use('/api/projects', projectMemberRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api', aiRoutes);
+app.use('/api', commentRoutes);
 
 app.use((error, req, res, next) => {
   if (error.type === 'entity.too.large') {

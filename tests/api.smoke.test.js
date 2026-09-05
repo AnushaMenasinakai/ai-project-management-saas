@@ -15,6 +15,7 @@ const mockDatabase = {
   tasks: [],
   documents: [],
   chunks: [],
+  comments: [],
 };
 
 const mockIdsEqual = (left, right) =>
@@ -243,6 +244,75 @@ jest.mock('../src/models/DocumentChunk', () => ({
   }),
 }));
 
+jest.mock('../src/models/Comment', () => {
+  const hydrate = (storedComment) => {
+    if (!storedComment) return null;
+
+    const comment = { ...storedComment };
+    comment.save = jest.fn(async () => {
+      storedComment.content = comment.content;
+      storedComment.updatedAt = new Date();
+      comment.updatedAt = storedComment.updatedAt;
+      return comment;
+    });
+    comment.populate = jest.fn(async () => {
+      const authorId = storedComment.author;
+      const author = mockDatabase.users.find((user) => mockIdsEqual(user._id, authorId));
+      comment.author = author ? { _id: author._id, name: author.name } : null;
+      return comment;
+    });
+    return comment;
+  };
+
+  return {
+    create: jest.fn(async (data) => {
+      const now = new Date();
+      const storedComment = {
+        _id: new mockMongoose.Types.ObjectId(),
+        ...data,
+        createdAt: now,
+        updatedAt: now,
+      };
+      mockDatabase.comments.push(storedComment);
+      return hydrate(storedComment);
+    }),
+    find: jest.fn((query) => {
+      const matching = mockDatabase.comments.filter((comment) =>
+        mockIdsEqual(comment.task, query.task) && mockIdsEqual(comment.project, query.project)
+      );
+      const chain = {
+        sort: jest.fn(() => chain),
+        populate: jest.fn(async () => Promise.all(
+          [...matching]
+            .sort((left, right) => left.createdAt - right.createdAt || left._id.toString().localeCompare(right._id.toString()))
+            .map(async (comment) => {
+              const hydrated = hydrate(comment);
+              await hydrated.populate();
+              return hydrated;
+            })
+        )),
+      };
+      return chain;
+    }),
+    findById: jest.fn(async (id) => hydrate(
+      mockDatabase.comments.find((comment) => mockIdsEqual(comment._id, id)) || null
+    )),
+    deleteOne: jest.fn(async (query) => {
+      const index = mockDatabase.comments.findIndex((comment) => mockIdsEqual(comment._id, query._id));
+      if (index !== -1) mockDatabase.comments.splice(index, 1);
+      return { acknowledged: true, deletedCount: index === -1 ? 0 : 1 };
+    }),
+    deleteMany: jest.fn(async (query) => {
+      mockDatabase.comments = mockDatabase.comments.filter((comment) => {
+        if (query.task && !mockIdsEqual(comment.task, query.task)) return true;
+        if (query.project && !mockIdsEqual(comment.project, query.project)) return true;
+        return false;
+      });
+      return { acknowledged: true };
+    }),
+  };
+});
+
 jest.mock('../src/services/embeddingService', () => ({
   generateEmbedding: jest.fn(async () => [0.25, 0.5, 0.75]),
 }));
@@ -254,7 +324,22 @@ jest.mock('../src/middleware/rateLimiters', () => ({
 
 jest.spyOn(mockMongoose, 'startSession').mockResolvedValue({
   endSession: jest.fn(async () => undefined),
-  withTransaction: jest.fn(async (operation) => operation()),
+  withTransaction: jest.fn(async (operation) => {
+    const snapshot = {
+      projects: mockDatabase.projects.map((project) => ({ ...project, members: [...project.members] })),
+      tasks: mockDatabase.tasks.map((task) => ({ ...task, dependencies: [...task.dependencies] })),
+      documents: mockDatabase.documents.map((document) => ({ ...document })),
+      chunks: mockDatabase.chunks.map((chunk) => ({ ...chunk })),
+      comments: mockDatabase.comments.map((comment) => ({ ...comment })),
+    };
+
+    try {
+      return await operation();
+    } catch (error) {
+      Object.assign(mockDatabase, snapshot);
+      throw error;
+    }
+  }),
 });
 
 const app = require('../src/app');
@@ -283,6 +368,7 @@ const clearDatabase = async () => {
   mockDatabase.tasks.length = 0;
   mockDatabase.documents.length = 0;
   mockDatabase.chunks.length = 0;
+  mockDatabase.comments.length = 0;
 };
 
 const registerAndLogin = async (user = OWNER) => {
@@ -352,6 +438,16 @@ const createProjectDocument = async (token, projectId) => {
     .expect(201);
 
   return response.body.document;
+};
+
+const createTaskComment = async (token, taskId, content = 'Initial project update.') => {
+  const response = await request(app)
+    .post(`/api/tasks/${taskId}/comments`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({ content })
+    .expect(201);
+
+  return response.body.comment;
 };
 
 afterEach(clearDatabase);
@@ -802,5 +898,274 @@ describe('outsider and unauthenticated permission regressions', () => {
 
     const responses = await Promise.all(requests);
     responses.forEach((response) => expect(response.status).toBe(401));
+  });
+});
+
+describe('task comment API regressions', () => {
+  test('allows collaborators to read comments oldest-first with safe authors and hides them from others', async () => {
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id);
+    const ownerComment = await createTaskComment(owner.token, task._id, 'Owner opened the discussion.');
+    const memberComment = await createTaskComment(member.token, task._id, 'Member replied.');
+
+    mockDatabase.comments.find((comment) => mockIdsEqual(comment._id, ownerComment._id)).createdAt = new Date('2026-01-01');
+    mockDatabase.comments.find((comment) => mockIdsEqual(comment._id, memberComment._id)).createdAt = new Date('2026-01-02');
+
+    for (const collaborator of [owner, member]) {
+      const response = await request(app)
+        .get(`/api/tasks/${task._id}/comments`)
+        .set('Authorization', `Bearer ${collaborator.token}`)
+        .expect(200);
+
+      expect(response.body.comments.map((comment) => comment.content)).toEqual([
+        'Owner opened the discussion.',
+        'Member replied.',
+      ]);
+      expect(response.body.comments[0].author).toEqual({
+        _id: owner.user.id,
+        name: owner.user.name,
+      });
+      expect(response.body.comments[0].author).not.toHaveProperty('email');
+      expect(response.body.comments[0].author).not.toHaveProperty('passwordHash');
+    }
+
+    await request(app)
+      .get(`/api/tasks/${task._id}/comments`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .expect(404);
+    await request(app).get(`/api/tasks/${task._id}/comments`).expect(401);
+    await request(app)
+      .post(`/api/tasks/${task._id}/comments`)
+      .send({ content: 'No authentication.' })
+      .expect(401);
+
+    await request(app)
+      .delete(`/api/projects/${project._id}/members/${member.user.id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+    await request(app)
+      .get(`/api/tasks/${task._id}/comments`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(404);
+  });
+
+  test('derives comment references on the server for both owner and member creation', async () => {
+    const { member, owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id);
+    const attackerId = new mockMongoose.Types.ObjectId().toString();
+
+    const ownerResponse = await request(app)
+      .post(`/api/tasks/${task._id}/comments`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({
+        content: '  Server-derived owner comment.  ',
+        author: attackerId,
+        project: attackerId,
+        task: attackerId,
+      })
+      .expect(201);
+    const memberResponse = await request(app)
+      .post(`/api/tasks/${task._id}/comments`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ content: 'Member comment.' })
+      .expect(201);
+
+    expect(ownerResponse.body.comment).toMatchObject({
+      content: 'Server-derived owner comment.',
+      task: task._id,
+      project: project._id,
+      author: { _id: owner.user.id, name: owner.user.name },
+    });
+    expect(memberResponse.body.comment.author._id).toBe(member.user.id);
+    expect(mockDatabase.comments[0]).toMatchObject({
+      task: expect.anything(),
+      project: expect.anything(),
+      author: expect.anything(),
+    });
+    expect(mockDatabase.comments[0].task.toString()).toBe(task._id.toString());
+    expect(mockDatabase.comments[0].project.toString()).toBe(project._id.toString());
+    expect(mockDatabase.comments[0].author.toString()).toBe(owner.user.id.toString());
+  });
+
+  test('enforces comment content validation and accepts the exact length boundary', async () => {
+    const { owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id);
+
+    for (const content of [undefined, null, 42, '', '   ', 'x'.repeat(5001)]) {
+      const response = await request(app)
+        .post(`/api/tasks/${task._id}/comments`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send(content === undefined ? {} : { content });
+      expect(response.status).toBe(400);
+    }
+
+    await request(app)
+      .post(`/api/tasks/${task._id}/comments`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ content: 'x'.repeat(5000) })
+      .expect(201);
+  });
+
+  test('allows author-only edits while ignoring immutable-reference payloads', async () => {
+    const { member, outsider, owner, project, storedProject } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id);
+    const memberComment = await createTaskComment(member.token, task._id, 'Original member words.');
+    const attackerId = new mockMongoose.Types.ObjectId().toString();
+
+    const updateResponse = await request(app)
+      .patch(`/api/comments/${memberComment._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ content: '  Updated member words.  ', author: attackerId, task: attackerId, project: attackerId })
+      .expect(200);
+    expect(updateResponse.body.comment).toMatchObject({
+      content: 'Updated member words.',
+      task: task._id,
+      project: project._id,
+      author: { _id: member.user.id, name: member.user.name },
+    });
+
+    const ownerEdit = await request(app)
+      .patch(`/api/comments/${memberComment._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ content: 'Owner must not rewrite this.' })
+      .expect(403);
+    expect(ownerEdit.body.message).toBe('You can only edit your own comments.');
+
+    storedProject.members.push(outsider.user.id);
+    await request(app)
+      .patch(`/api/comments/${memberComment._id}`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .send({ content: 'Another member must not rewrite this.' })
+      .expect(403);
+    storedProject.members = storedProject.members.filter((id) => !mockIdsEqual(id, outsider.user.id));
+
+    await request(app)
+      .patch(`/api/comments/${memberComment._id}`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .send({ content: 'Hidden outsider edit.' })
+      .expect(404);
+    await request(app)
+      .patch(`/api/comments/${memberComment._id}`)
+      .send({ content: 'No authentication.' })
+      .expect(401);
+    await request(app)
+      .patch(`/api/comments/${memberComment._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ content: '   ' })
+      .expect(400);
+  });
+
+  test('allows author and owner deletion but forbids other members and outsiders', async () => {
+    const { member, outsider, owner, project, storedProject } = await createCollaborationFixture();
+    storedProject.members.push(outsider.user.id);
+    const task = await createProjectTask(owner.token, project._id);
+    const ownerComment = await createTaskComment(owner.token, task._id, 'Owner-owned comment.');
+    const memberComment = await createTaskComment(member.token, task._id, 'Member-owned comment.');
+    const memberSelfDeleteComment = await createTaskComment(member.token, task._id, 'Member deletes this.');
+
+    const forbidden = await request(app)
+      .delete(`/api/comments/${memberComment._id}`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .expect(403);
+    expect(forbidden.body.message).toBe(
+      'Only the comment author or project owner can delete comments.'
+    );
+
+    storedProject.members = storedProject.members.filter((id) => !mockIdsEqual(id, outsider.user.id));
+    await request(app)
+      .delete(`/api/comments/${memberComment._id}`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .expect(404);
+    await request(app).delete(`/api/comments/${memberComment._id}`).expect(401);
+
+    await request(app)
+      .delete(`/api/comments/${memberSelfDeleteComment._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/comments/${memberComment._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+    await request(app)
+      .delete(`/api/comments/${ownerComment._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+    expect(mockDatabase.comments).toHaveLength(0);
+  });
+
+  test('deletes task comments atomically while preserving dependency cleanup', async () => {
+    const Comment = require('../src/models/Comment');
+    const Task = require('../src/models/Task');
+    const { owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id, 'Task with discussion');
+    const dependentTask = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'Dependent task', project: project._id, dependencies: [task._id] })
+      .expect(201);
+    await createTaskComment(owner.token, task._id);
+
+    await request(app)
+      .delete(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+
+    expect(mockDatabase.comments).toHaveLength(0);
+    expect(mockDatabase.tasks.find((item) => mockIdsEqual(item._id, dependentTask.body.task._id)).dependencies).toEqual([]);
+    const taskSession = Task.updateMany.mock.calls.at(-1)[2].session;
+    expect(Comment.deleteMany.mock.calls.at(-1)[1].session).toBe(taskSession);
+    expect(Task.findByIdAndDelete.mock.calls.at(-1)[1].session).toBe(taskSession);
+
+    const rollbackTask = await createProjectTask(owner.token, project._id, 'Rollback task');
+    const rollbackDependent = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'Rollback dependent', project: project._id, dependencies: [rollbackTask._id] })
+      .expect(201);
+    await createTaskComment(owner.token, rollbackTask._id, 'Must survive rollback.');
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    Comment.deleteMany.mockRejectedValueOnce(new Error('Simulated comment cleanup failure'));
+
+    await request(app)
+      .delete(`/api/tasks/${rollbackTask._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(500);
+    consoleError.mockRestore();
+
+    expect(mockDatabase.tasks.some((item) => mockIdsEqual(item._id, rollbackTask._id))).toBe(true);
+    expect(mockDatabase.comments.some((item) => mockIdsEqual(item.task, rollbackTask._id))).toBe(true);
+    expect(mockDatabase.tasks.find((item) => mockIdsEqual(item._id, rollbackDependent.body.task._id)).dependencies)
+      .toEqual([expect.anything()]);
+  });
+
+  test('deletes project comments in its transaction and rolls all cleanup back on failure', async () => {
+    const Comment = require('../src/models/Comment');
+    const { owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id);
+    await createTaskComment(owner.token, task._id);
+
+    const Project = require('../src/models/Project');
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    Project.deleteOne.mockRejectedValueOnce(new Error('Simulated project deletion failure'));
+    await request(app)
+      .delete(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(500);
+    consoleError.mockRestore();
+
+    expect(mockDatabase.projects).toHaveLength(1);
+    expect(mockDatabase.tasks).toHaveLength(1);
+    expect(mockDatabase.comments).toHaveLength(1);
+
+    await request(app)
+      .delete(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+    expect(Comment.deleteMany.mock.calls.at(-1)[0]).toEqual({ project: expect.anything() });
+    expect(Comment.deleteMany.mock.calls.at(-1)[1]).toEqual({ session: expect.any(Object) });
+    expect(mockDatabase.projects).toHaveLength(0);
+    expect(mockDatabase.tasks).toHaveLength(0);
+    expect(mockDatabase.comments).toHaveLength(0);
   });
 });

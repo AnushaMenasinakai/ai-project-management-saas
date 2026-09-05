@@ -3,6 +3,7 @@ const Project = require('../models/Project');
 const Task = require('../models/Task');
 const Document = require('../models/Document');
 const DocumentChunk = require('../models/DocumentChunk');
+const Comment = require('../models/Comment');
 const {
   findProjectForCollaborator,
   findProjectForOwner,
@@ -171,6 +172,7 @@ const deleteProject = async (req, res) => {
       await session.withTransaction(async () => {
         await DocumentChunk.deleteMany({ project: project._id }, { session });
         await Document.deleteMany({ project: project._id }, { session });
+        await Comment.deleteMany({ project: project._id }, { session });
         await Task.deleteMany({ project: project._id }, { session });
         await Project.deleteOne(
           { _id: project._id, owner: req.user.id },

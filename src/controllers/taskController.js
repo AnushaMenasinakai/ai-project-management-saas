@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Task = require('../models/Task');
+const Comment = require('../models/Comment');
 const { findProjectForCollaborator } = require('../services/projectAccessService');
 const {
   validateTaskAssignee,
@@ -270,12 +271,24 @@ exports.deleteTask = async (req, res) => {
       });
     }
 
-    await Task.updateMany(
-      { project: task.project, dependencies: task._id },
-      { $pull: { dependencies: task._id } }
-    );
+    const session = await mongoose.startSession();
 
-    await Task.findByIdAndDelete(id);
+    try {
+      await session.withTransaction(async () => {
+        await Task.updateMany(
+          { project: task.project, dependencies: task._id },
+          { $pull: { dependencies: task._id } },
+          { session }
+        );
+        await Comment.deleteMany(
+          { task: task._id, project: project._id },
+          { session }
+        );
+        await Task.findByIdAndDelete(id, { session });
+      });
+    } finally {
+      await session.endSession();
+    }
 
     return res.status(200).json({
       message: 'Task deleted successfully.',
