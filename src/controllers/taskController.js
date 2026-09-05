@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const Task = require('../models/Task');
 const Comment = require('../models/Comment');
+const { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } = require('../constants/activityConstants');
+const { recordActivity, resolveActorSnapshot } = require('../services/activityService');
 const { findProjectForCollaborator } = require('../services/projectAccessService');
 const {
   validateTaskAssignee,
@@ -57,16 +59,36 @@ exports.createTask = async (req, res) => {
       validatedDependencies = dependencyResult.value;
     }
 
-    const task = await Task.create({
-      title,
-      description,
-      project,
-      status,
-      priority,
-      dueDate,
-      assignedTo,
-      dependencies: validatedDependencies,
-    });
+    const actor = await resolveActorSnapshot(req.user.id);
+    const session = await mongoose.startSession();
+    let task;
+
+    try {
+      await session.withTransaction(async () => {
+        [task] = await Task.create([{
+          title,
+          description,
+          project,
+          status,
+          priority,
+          dueDate,
+          assignedTo,
+          dependencies: validatedDependencies,
+        }], { session });
+
+        await recordActivity({
+          project: existingProject._id,
+          ...actor,
+          type: ACTIVITY_TYPES.TASK_CREATED,
+          entityType: ACTIVITY_ENTITY_TYPES.TASK,
+          entityId: task._id,
+          entityName: task.title,
+          session,
+        });
+      });
+    } finally {
+      await session.endSession();
+    }
 
     return res.status(201).json({
       message: 'Task created successfully.',
@@ -217,14 +239,43 @@ exports.updateTask = async (req, res) => {
       updates.dependencies = dependencyResult.value;
     }
 
-    const updatedTask = await Task.findByIdAndUpdate(
-      id,
-      updates,
-      {
-        new: true,
-        runValidators: true,
+    const previousStatus = task.status;
+    const statusChanged = status !== undefined && status !== previousStatus;
+    let updatedTask;
+
+    if (statusChanged) {
+      const actor = await resolveActorSnapshot(req.user.id);
+      const session = await mongoose.startSession();
+
+      try {
+        await session.withTransaction(async () => {
+          updatedTask = await Task.findByIdAndUpdate(
+            id,
+            updates,
+            { new: true, runValidators: true, session }
+          );
+
+          await recordActivity({
+            project: project._id,
+            ...actor,
+            type: ACTIVITY_TYPES.TASK_STATUS_CHANGED,
+            entityType: ACTIVITY_ENTITY_TYPES.TASK,
+            entityId: task._id,
+            entityName: updatedTask.title,
+            metadata: { from: previousStatus, to: updatedTask.status },
+            session,
+          });
+        });
+      } finally {
+        await session.endSession();
       }
-    );
+    } else {
+      updatedTask = await Task.findByIdAndUpdate(
+        id,
+        updates,
+        { new: true, runValidators: true }
+      );
+    }
 
     return res.status(200).json({
       message: 'Task updated successfully.',

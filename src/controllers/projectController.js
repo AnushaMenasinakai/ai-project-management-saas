@@ -4,6 +4,9 @@ const Task = require('../models/Task');
 const Document = require('../models/Document');
 const DocumentChunk = require('../models/DocumentChunk');
 const Comment = require('../models/Comment');
+const Activity = require('../models/Activity');
+const { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } = require('../constants/activityConstants');
+const { recordActivity, resolveActorSnapshot } = require('../services/activityService');
 const {
   findProjectForCollaborator,
   findProjectForOwner,
@@ -21,14 +24,34 @@ const createProject = async (req, res) => {
       return res.status(400).json({ message: 'Project name is required.' });
     }
 
-    const project = await Project.create({
-      name: name.trim(),
-      description,
-      status,
-      startDate,
-      dueDate,
-      owner: req.user.id,
-    });
+    const actor = await resolveActorSnapshot(req.user.id);
+    const session = await mongoose.startSession();
+    let project;
+
+    try {
+      await session.withTransaction(async () => {
+        [project] = await Project.create([{
+          name: name.trim(),
+          description,
+          status,
+          startDate,
+          dueDate,
+          owner: req.user.id,
+        }], { session });
+
+        await recordActivity({
+          project: project._id,
+          ...actor,
+          type: ACTIVITY_TYPES.PROJECT_CREATED,
+          entityType: ACTIVITY_ENTITY_TYPES.PROJECT,
+          entityId: project._id,
+          entityName: project.name,
+          session,
+        });
+      });
+    } finally {
+      await session.endSession();
+    }
 
     return res.status(201).json({ project });
   } catch (error) {
@@ -173,6 +196,7 @@ const deleteProject = async (req, res) => {
         await DocumentChunk.deleteMany({ project: project._id }, { session });
         await Document.deleteMany({ project: project._id }, { session });
         await Comment.deleteMany({ project: project._id }, { session });
+        await Activity.deleteMany({ project: project._id }, { session });
         await Task.deleteMany({ project: project._id }, { session });
         await Project.deleteOne(
           { _id: project._id, owner: req.user.id },

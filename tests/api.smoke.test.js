@@ -16,6 +16,7 @@ const mockDatabase = {
   documents: [],
   chunks: [],
   comments: [],
+  activities: [],
 };
 
 const mockIdsEqual = (left, right) =>
@@ -50,16 +51,22 @@ jest.mock('../src/models/User', () => ({
     mockDatabase.users.push(user);
     return user;
   }),
-  findById: jest.fn(async (id) =>
-    mockDatabase.users.find((user) => mockIdsEqual(user._id, id)) || null
-  ),
+  findById: jest.fn((id) => {
+    const user = mockDatabase.users.find((candidate) => mockIdsEqual(candidate._id, id)) || null;
+    const result = Promise.resolve(user);
+    result.select = jest.fn(async () => (
+      user ? { _id: user._id, name: user.name } : null
+    ));
+    return result;
+  }),
   findOne: jest.fn(async ({ email }) =>
     mockDatabase.users.find((user) => user.email === email) || null
   ),
 }));
 
 jest.mock('../src/models/Project', () => ({
-  create: jest.fn(async (data) => {
+  create: jest.fn(async (input) => {
+    const data = Array.isArray(input) ? input[0] : input;
     const now = new Date();
     const project = {
       _id: new mockMongoose.Types.ObjectId(),
@@ -72,7 +79,7 @@ jest.mock('../src/models/Project', () => ({
     project.save = jest.fn(async () => project);
     project.toObject = () => ({ ...project, save: undefined, toObject: undefined });
     mockDatabase.projects.push(project);
-    return project;
+    return Array.isArray(input) ? [project] : project;
   }),
   find: jest.fn(async (query) =>
     mockDatabase.projects.filter((project) => mockProjectMatches(project, query))
@@ -123,19 +130,20 @@ jest.mock('../src/models/Task', () => ({
         (!query.status || task.status === query.status)
     ).length
   ),
-  create: jest.fn(async (data) => {
+  create: jest.fn(async (input) => {
+    const data = Array.isArray(input) ? input[0] : input;
     const now = new Date();
     const task = {
       _id: new mockMongoose.Types.ObjectId(),
-      status: 'todo',
-      priority: 'medium',
       dependencies: [],
       ...data,
+      status: data.status ?? 'todo',
+      priority: data.priority ?? 'medium',
       createdAt: now,
       updatedAt: now,
     };
     mockDatabase.tasks.push(task);
-    return task;
+    return Array.isArray(input) ? [task] : task;
   }),
   find: jest.fn((query) => {
     const tasks = mockDatabase.tasks.filter(
@@ -313,6 +321,61 @@ jest.mock('../src/models/Comment', () => {
   };
 });
 
+jest.mock('../src/models/Activity', () => ({
+  create: jest.fn(async (input) => {
+    const data = Array.isArray(input) ? input[0] : input;
+    const activity = {
+      _id: new mockMongoose.Types.ObjectId(),
+      ...data,
+      createdAt: new Date(),
+    };
+    mockDatabase.activities.push(activity);
+    return Array.isArray(input) ? [activity] : activity;
+  }),
+  find: jest.fn((query) => {
+    let limit = Infinity;
+    let selectedFields = null;
+    const chain = {
+      select: jest.fn((fields) => {
+        selectedFields = new Set(fields.split(/\s+/));
+        return chain;
+      }),
+      sort: jest.fn(() => chain),
+      limit: jest.fn((value) => {
+        limit = value;
+        return chain;
+      }),
+      lean: jest.fn(async () => mockDatabase.activities
+        .filter((activity) => {
+          if (!mockIdsEqual(activity.project, query.project)) return false;
+          if (!query.$or) return true;
+          return query.$or.some((condition) => {
+            if (condition.createdAt?.$lt) return activity.createdAt < condition.createdAt.$lt;
+            return activity.createdAt.getTime() === condition.createdAt.getTime()
+              && activity._id.toString() < condition._id.$lt.toString();
+          });
+        })
+        .sort((left, right) => (
+          right.createdAt - left.createdAt
+          || right._id.toString().localeCompare(left._id.toString())
+        ))
+        .slice(0, limit)
+        .map((activity) => (
+          selectedFields
+            ? Object.fromEntries(Object.entries(activity).filter(([key]) => selectedFields.has(key)))
+            : { ...activity }
+        ))),
+    };
+    return chain;
+  }),
+  deleteMany: jest.fn(async (query) => {
+    mockDatabase.activities = mockDatabase.activities.filter(
+      (activity) => !mockIdsEqual(activity.project, query.project)
+    );
+    return { acknowledged: true };
+  }),
+}));
+
 jest.mock('../src/services/embeddingService', () => ({
   generateEmbedding: jest.fn(async () => [0.25, 0.5, 0.75]),
 }));
@@ -331,6 +394,7 @@ jest.spyOn(mockMongoose, 'startSession').mockResolvedValue({
       documents: mockDatabase.documents.map((document) => ({ ...document })),
       chunks: mockDatabase.chunks.map((chunk) => ({ ...chunk })),
       comments: mockDatabase.comments.map((comment) => ({ ...comment })),
+      activities: mockDatabase.activities.map((activity) => ({ ...activity })),
     };
 
     try {
@@ -369,6 +433,7 @@ const clearDatabase = async () => {
   mockDatabase.documents.length = 0;
   mockDatabase.chunks.length = 0;
   mockDatabase.comments.length = 0;
+  mockDatabase.activities.length = 0;
 };
 
 const registerAndLogin = async (user = OWNER) => {
@@ -619,6 +684,227 @@ describe('task API smoke tests', () => {
       .expect(401);
 
     await request(app).delete(`/api/tasks/${taskId}`).expect(401);
+  });
+});
+
+describe('activity log backend foundation', () => {
+  test('records trusted project and task snapshots while ignoring hostile activity fields', async () => {
+    const Activity = require('../src/models/Activity');
+    const owner = await registerAndLogin(OWNER);
+    const projectResponse = await request(app)
+      .post('/api/projects')
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({
+        name: 'Trusted Project Name',
+        actor: new mockMongoose.Types.ObjectId(),
+        actorName: 'Forged Actor',
+        type: 'forged_event',
+        metadata: { password: 'never-store-this' },
+      })
+      .expect(201);
+    const project = projectResponse.body.project;
+
+    const member = await registerAndLogin(MEMBER);
+    mockDatabase.projects.find((item) => mockIdsEqual(item._id, project._id)).members.push(member.user.id);
+    const taskResponse = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({
+        title: 'Trusted Task Name',
+        project: project._id,
+        actorName: 'Forged Task Actor',
+        metadata: { token: 'never-store-this' },
+      })
+      .expect(201);
+
+    expect(mockDatabase.activities).toEqual([
+      expect.objectContaining({
+        project: expect.anything(),
+        actor: expect.anything(),
+        actorName: OWNER.name,
+        type: 'project_created',
+        entityType: 'project',
+        entityId: expect.anything(),
+        entityName: 'Trusted Project Name',
+        metadata: {},
+      }),
+      expect.objectContaining({
+        actorName: MEMBER.name,
+        type: 'task_created',
+        entityType: 'task',
+        entityId: expect.anything(),
+        entityName: 'Trusted Task Name',
+        metadata: {},
+      }),
+    ]);
+    expect(mockDatabase.activities.some((activity) => activity.actorName.includes('Forged'))).toBe(false);
+    expect(mockDatabase.activities.some((activity) => activity.metadata.password || activity.metadata.token)).toBe(false);
+    expect(Activity.create.mock.calls.every((call) => call[1]?.session)).toBe(true);
+    expect(taskResponse.body.task._id).toBeTruthy();
+  });
+
+  test('allows collaborators to read isolated newest-first activity with cursor pagination', async () => {
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+    await createProjectTask(owner.token, project._id, 'Older Task');
+    await createProjectTask(member.token, project._id, 'Newest Task');
+    mockDatabase.activities.forEach((activity, index) => {
+      activity.createdAt = new Date(index === 0
+        ? '2026-01-01T00:00:00.000Z'
+        : '2026-01-02T00:00:00.000Z');
+      activity.privateValue = 'must-not-leak';
+    });
+    await createOwnedProject(outsider.token);
+
+    const firstPage = await request(app)
+      .get(`/api/projects/${project._id}/activities?limit=2`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .expect(200);
+
+    expect(firstPage.body.activities.map((activity) => activity.entityName)).toEqual([
+      'Newest Task',
+      'Older Task',
+    ]);
+    expect(firstPage.body.activities.every((activity) => activity.project === project._id.toString())).toBe(true);
+    expect(firstPage.body.activities[0]).not.toHaveProperty('privateValue');
+    expect(firstPage.body.nextCursor).toEqual(expect.any(String));
+
+    const secondPage = await request(app)
+      .get(`/api/projects/${project._id}/activities?limit=2&cursor=${encodeURIComponent(firstPage.body.nextCursor)}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(200);
+    expect(secondPage.body.activities.map((activity) => activity.type)).toEqual(['project_created']);
+    expect(secondPage.body.nextCursor).toBeNull();
+
+    await request(app)
+      .get(`/api/projects/${project._id}/activities`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .expect(404);
+    await request(app).get(`/api/projects/${project._id}/activities`).expect(401);
+  });
+
+  test('validates activity limits and cursors predictably', async () => {
+    const { token } = await registerAndLogin();
+    const project = await createOwnedProject(token);
+
+    for (const limit of ['0', '101', '1.5', 'nope']) {
+      await request(app)
+        .get(`/api/projects/${project._id}/activities?limit=${limit}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(400);
+    }
+
+    await request(app)
+      .get(`/api/projects/${project._id}/activities?cursor=not-a-valid-cursor`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(400);
+  });
+
+  test('records only real task status changes with semantic metadata', async () => {
+    const { member, project } = await createCollaborationFixture();
+    const task = await createProjectTask(member.token, project._id, 'Move on Kanban');
+    const initialCount = mockDatabase.activities.length;
+
+    await request(app)
+      .patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ status: 'in_progress' })
+      .expect(200);
+
+    expect(mockDatabase.activities).toHaveLength(initialCount + 1);
+    expect(mockDatabase.activities.at(-1)).toMatchObject({
+      actorName: MEMBER.name,
+      type: 'task_status_changed',
+      entityType: 'task',
+      entityName: 'Move on Kanban',
+      metadata: { from: 'todo', to: 'in_progress' },
+    });
+
+    await request(app)
+      .patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ status: 'in_progress' })
+      .expect(200);
+    await request(app)
+      .patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ priority: 'high' })
+      .expect(200);
+
+    expect(mockDatabase.activities).toHaveLength(initialCount + 1);
+  });
+
+  test('rolls back database-only mutations when activity recording fails', async () => {
+    const Activity = require('../src/models/Activity');
+    const { token } = await registerAndLogin();
+    const project = await createOwnedProject(token);
+    const taskCount = mockDatabase.tasks.length;
+    const activityCount = mockDatabase.activities.length;
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    Activity.create.mockRejectedValueOnce(new Error('Simulated activity failure'));
+
+    await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Must roll back', project: project._id })
+      .expect(500);
+
+    expect(mockDatabase.tasks).toHaveLength(taskCount);
+    expect(mockDatabase.activities).toHaveLength(activityCount);
+
+    const existingTask = await createProjectTask(token, project._id, 'Status must roll back');
+    Activity.create.mockRejectedValueOnce(new Error('Simulated status activity failure'));
+    await request(app)
+      .patch(`/api/tasks/${existingTask._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'in_progress' })
+      .expect(500);
+
+    expect(mockDatabase.tasks.find((task) => mockIdsEqual(task._id, existingTask._id)).status)
+      .toBe('todo');
+    consoleError.mockRestore();
+  });
+
+  test('retains task history but removes project activity atomically with project deletion', async () => {
+    const Activity = require('../src/models/Activity');
+    const Project = require('../src/models/Project');
+    const { token } = await registerAndLogin();
+    const project = await createOwnedProject(token);
+    const task = await createProjectTask(token, project._id, 'History survives task deletion');
+
+    await request(app)
+      .delete(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(mockDatabase.activities.some((activity) => (
+      activity.type === 'task_created' && mockIdsEqual(activity.entityId, task._id)
+    ))).toBe(true);
+
+    const beforeRollback = mockDatabase.activities.length;
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    Project.deleteOne.mockRejectedValueOnce(new Error('Simulated deletion failure'));
+    await request(app)
+      .delete(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(500);
+    consoleError.mockRestore();
+    expect(mockDatabase.activities).toHaveLength(beforeRollback);
+
+    await request(app)
+      .delete(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(mockDatabase.activities).toHaveLength(0);
+    expect(Activity.deleteMany.mock.calls.at(-1)[1]).toEqual({ session: expect.any(Object) });
+  });
+
+  test('exposes no public activity mutation route', async () => {
+    const { token } = await registerAndLogin();
+    const project = await createOwnedProject(token);
+    const authorization = { Authorization: `Bearer ${token}` };
+
+    await request(app).post(`/api/projects/${project._id}/activities`).set(authorization).send({}).expect(404);
+    await request(app).patch('/api/activities/anything').set(authorization).send({}).expect(404);
+    await request(app).delete('/api/activities/anything').set(authorization).expect(404);
   });
 });
 

@@ -16,6 +16,7 @@ const mockDatabase = {
   tasks: [],
   documents: [],
   chunks: [],
+  activities: [],
 };
 
 const mockGenerateContent = jest.fn();
@@ -52,16 +53,22 @@ jest.mock('../src/models/User', () => ({
     mockDatabase.users.push(user);
     return user;
   }),
-  findById: jest.fn(async (id) =>
-    mockDatabase.users.find((user) => mockIdsEqual(user._id, id)) || null
-  ),
+  findById: jest.fn((id) => {
+    const user = mockDatabase.users.find((candidate) => mockIdsEqual(candidate._id, id)) || null;
+    const result = Promise.resolve(user);
+    result.select = jest.fn(async () => (
+      user ? { _id: user._id, name: user.name } : null
+    ));
+    return result;
+  }),
   findOne: jest.fn(async ({ email }) =>
     mockDatabase.users.find((user) => user.email === email) || null
   ),
 }));
 
 jest.mock('../src/models/Project', () => ({
-  create: jest.fn(async (data) => {
+  create: jest.fn(async (input) => {
+    const data = Array.isArray(input) ? input[0] : input;
     const project = {
       _id: new mockMongoose.Types.ObjectId(),
       members: [],
@@ -69,7 +76,7 @@ jest.mock('../src/models/Project', () => ({
       ...data,
     };
     mockDatabase.projects.push(project);
-    return project;
+    return Array.isArray(input) ? [project] : project;
   }),
   find: jest.fn(async (query) =>
     mockDatabase.projects.filter((project) => mockProjectMatches(project, query))
@@ -165,6 +172,25 @@ jest.mock('../src/models/Task', () => ({
   deleteMany: jest.fn(async () => ({ acknowledged: true })),
 }));
 
+jest.mock('../src/models/Activity', () => ({
+  create: jest.fn(async (input) => {
+    const data = Array.isArray(input) ? input[0] : input;
+    const activity = { _id: new mockMongoose.Types.ObjectId(), ...data, createdAt: new Date() };
+    mockDatabase.activities.push(activity);
+    return Array.isArray(input) ? [activity] : activity;
+  }),
+  find: jest.fn(() => {
+    const chain = {
+      select: jest.fn(() => chain),
+      sort: jest.fn(() => chain),
+      limit: jest.fn(() => chain),
+      lean: jest.fn(async () => []),
+    };
+    return chain;
+  }),
+  deleteMany: jest.fn(async () => ({ acknowledged: true })),
+}));
+
 jest.mock('../src/middleware/rateLimiters', () => ({
   authLimiter: (req, res, next) => next(),
   aiLimiter: (req, res, next) => next(),
@@ -174,16 +200,20 @@ const mockSession = {
   endSession: jest.fn(async () => undefined),
   withTransaction: jest.fn(async (operation) => {
     const snapshot = {
+      projects: [...mockDatabase.projects],
       tasks: [...mockDatabase.tasks],
       documents: [...mockDatabase.documents],
       chunks: [...mockDatabase.chunks],
+      activities: [...mockDatabase.activities],
     };
     try {
       return await operation();
     } catch (error) {
+      mockDatabase.projects = snapshot.projects;
       mockDatabase.tasks = snapshot.tasks;
       mockDatabase.documents = snapshot.documents;
       mockDatabase.chunks = snapshot.chunks;
+      mockDatabase.activities = snapshot.activities;
       throw error;
     }
   }),
