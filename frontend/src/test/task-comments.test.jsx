@@ -38,6 +38,7 @@ const renderTasks = () => render(
     filteredTasks={[task]}
     members={[]}
     isProjectOwner
+    currentUserId="user-1"
     tasksLoading={false}
     tasksError=""
     filters={{ search: '', status: 'all', priority: 'all', sort: 'created_desc' }}
@@ -98,8 +99,8 @@ describe('task comments read and create UI', () => {
     expect(container.querySelector('script')).toBeNull();
     expect(screen.getByText(/Edited/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Comments — Build Dashboard' })).toHaveFocus();
-    expect(screen.queryByRole('button', { name: /edit comment/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /delete comment/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit comment by Anusha' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete comment by Anusha' })).toBeInTheDocument();
     expect(screen.getByLabelText('Add comment')).toHaveAttribute('maxlength', '5000');
   });
 

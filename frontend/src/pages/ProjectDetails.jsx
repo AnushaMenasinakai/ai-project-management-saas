@@ -330,6 +330,7 @@ return (
       filteredTasks={filteredTasks}
       members={members}
       isProjectOwner={isProjectOwner}
+      currentUserId={user?.id}
       tasksLoading={tasksLoading}
       tasksError={tasksError}
       filters={taskFilters}

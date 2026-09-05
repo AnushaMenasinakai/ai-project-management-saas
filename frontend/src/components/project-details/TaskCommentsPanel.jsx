@@ -6,7 +6,7 @@ import Card from '../Card';
 import LoadingState from '../LoadingState';
 import TaskComment from './TaskComment';
 
-const TaskCommentsPanel = ({ task, onClose }) => {
+const TaskCommentsPanel = ({ task, currentUserId, isProjectOwner, onClose }) => {
   const [content, setContent] = useState('');
   const headingRef = useRef(null);
   const {
@@ -15,8 +15,13 @@ const TaskCommentsPanel = ({ task, onClose }) => {
     error,
     creating,
     createError,
+    updatingCommentIds,
+    deletingCommentIds,
+    mutationErrors,
     fetchComments,
     createComment,
+    updateComment,
+    deleteComment,
   } = useTaskComments(task._id);
 
   useEffect(() => {
@@ -28,6 +33,12 @@ const TaskCommentsPanel = ({ task, onClose }) => {
 
     if (await createComment(content)) {
       setContent('');
+    }
+  };
+
+  const handleDelete = async (commentId) => {
+    if (await deleteComment(commentId)) {
+      headingRef.current?.focus();
     }
   };
 
@@ -68,7 +79,19 @@ const TaskCommentsPanel = ({ task, onClose }) => {
       )}
       {!loading && !error && comments.length > 0 && (
         <ol className="task-comments-list" aria-label={`Comments for ${task.title}`}>
-          {comments.map((comment) => <TaskComment key={comment._id} comment={comment} />)}
+          {comments.map((comment) => (
+            <TaskComment
+              key={comment._id}
+              comment={comment}
+              currentUserId={currentUserId}
+              isProjectOwner={isProjectOwner}
+              updating={updatingCommentIds.has(comment._id)}
+              deleting={deletingCommentIds.has(comment._id)}
+              mutationError={mutationErrors[comment._id]}
+              onUpdate={updateComment}
+              onDelete={handleDelete}
+            />
+          ))}
         </ol>
       )}
 

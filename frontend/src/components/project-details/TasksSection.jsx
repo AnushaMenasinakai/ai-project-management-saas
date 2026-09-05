@@ -13,6 +13,7 @@ const TasksSection = ({
   filteredTasks,
   members,
   isProjectOwner,
+  currentUserId,
   tasksLoading,
   tasksError,
   filters,
@@ -113,6 +114,8 @@ const TasksSection = ({
       <TaskCommentsPanel
         key={activeCommentsTask._id}
         task={activeCommentsTask}
+        currentUserId={currentUserId}
+        isProjectOwner={isProjectOwner}
         onClose={() => setActiveCommentsTask(null)}
       />
     )}
