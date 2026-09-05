@@ -1345,7 +1345,7 @@ code {
 .member-avatar { align-items: center; background: var(--color-primary-soft); border-radius: 50%; color: var(--color-primary); display: inline-flex; flex: 0 0 2.5rem; font-weight: 750; height: 2.5rem; justify-content: center; }
 .member-identity { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .member-identity span { color: var(--color-text-muted); overflow-wrap: anywhere; }
-.members-workspace { order: 1; } .task-workspace { order: 2; } .documents-section { order: 3; } .project-qa-section { order: 4; }
+.members-workspace { order: 1; } .task-workspace { order: 2; } .documents-section { order: 3; } .project-qa-section { order: 4; } .activity-section { order: 5; }
 .task-workspace__header { order: 0; }
 .task-create-form { background: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-lg); order: 1; padding: var(--space-5); }
 .ai-task-generation { background: var(--color-info-soft); border: 1px solid var(--color-border); border-radius: var(--radius-lg); order: 2; padding: var(--space-5); }
@@ -1528,7 +1528,22 @@ select[multiple] { max-width: 100%; }
 .app-shell__subnav-link:hover:not(:disabled), .app-shell__subnav-link--active { background: var(--color-surface-subtle); border-color: transparent; color: var(--color-primary); }
 .app-shell--collapsed .app-shell__subnav { display: none; }
 
-#project-members, #project-tasks, #project-documents, #project-qa { scroll-margin-top: var(--space-5); }
+#project-members, #project-tasks, #project-documents, #project-qa, #project-activity { scroll-margin-top: var(--space-5); }
+
+.activity-section { gap: var(--space-5); }
+.activity-section__header { align-items: flex-start; display: flex; gap: var(--space-4); justify-content: space-between; }
+.activity-section__header > div { min-width: 0; }
+.activity-section__header .button { flex: 0 0 auto; }
+.activity-timeline { display: grid; gap: 0; list-style: none; margin: 0; padding: 0; }
+.activity-item { display: grid; gap: var(--space-3); grid-template-columns: 1rem minmax(0, 1fr); min-width: 0; padding-bottom: var(--space-4); position: relative; }
+.activity-item:not(:last-child)::before { background: var(--color-border); content: ''; left: .45rem; position: absolute; top: 1rem; bottom: 0; width: 1px; }
+.activity-item__marker { background: var(--color-primary); border: 3px solid var(--color-primary-soft); border-radius: 50%; height: .9rem; margin-top: .2rem; position: relative; width: .9rem; z-index: 1; }
+.activity-item__content { min-width: 0; }
+.activity-item__content p { margin: 0; overflow-wrap: anywhere; }
+.activity-item__content time { color: var(--color-text-muted); display: block; font-size: .78rem; margin-top: var(--space-1); overflow-wrap: anywhere; }
+.activity-empty { background: var(--color-surface-subtle); border: 1px dashed var(--color-border-strong); border-radius: var(--radius-md); padding: var(--space-5); text-align: center; }
+.activity-empty p { color: var(--color-text-muted); margin: var(--space-1) 0 0; }
+.activity-section__actions { display: flex; justify-content: center; }
 .members-workspace > * { order: 2; }
 .members-workspace > .workspace-section__header { order: 1; }
 .members-workspace > .member-form { order: 3; }
@@ -1658,7 +1673,7 @@ select[multiple] { max-width: 100%; }
 @media (max-width: 767px) {
   .app-shell--collapsed .app-shell__subnav { display: grid; }
   .app-shell__subnav { margin-left: 1.25rem; }
-  #project-members, #project-tasks, #project-documents, #project-qa { scroll-margin-top: 5rem; }
+  #project-members, #project-tasks, #project-documents, #project-qa, #project-activity { scroll-margin-top: 5rem; }
   .member-form { grid-template-columns: 1fr; }
   .member-form__heading { grid-column: auto; }
   .task-card__metadata { grid-template-columns: 1fr; }
@@ -1666,6 +1681,8 @@ select[multiple] { max-width: 100%; }
   .task-comments-panel__header { align-items: stretch; flex-direction: column; }
   .task-comments-panel__header .button, .task-comment-form__actions .button { width: 100%; }
   .task-comment__actions .button { flex: 1 1 8rem; }
+  .activity-section__header { align-items: stretch; flex-direction: column; }
+  .activity-section__header .button, .activity-section__actions .button { width: 100%; }
   .task-workspace__header-actions { align-items: stretch; flex-direction: column; width: 100%; }
   .task-view-toggle { width: 100%; }
   .task-view-toggle .button { flex: 1 1 0; }

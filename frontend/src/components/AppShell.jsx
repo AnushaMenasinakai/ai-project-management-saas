@@ -18,10 +18,12 @@ const AppShell = () => {
     ['project-tasks', 'Tasks'],
     ['project-documents', 'Documents'],
     ['project-qa', 'Project Q&A'],
+    ['project-activity', 'Activity'],
   ];
 
   const scrollToProjectSection = (sectionId) => {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.dispatchEvent(new CustomEvent('project-section-open', { detail: { sectionId } }));
     setActiveProjectSection(sectionId);
     setMobileMenuOpen(false);
   };

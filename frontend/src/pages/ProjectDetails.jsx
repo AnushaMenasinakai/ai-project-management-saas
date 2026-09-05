@@ -5,6 +5,7 @@ import Button from '../components/Button';
 import Card from '../components/Card';
 import LoadingState from '../components/LoadingState';
 import PageHeader from '../components/PageHeader';
+import ActivitySection from '../components/project-details/ActivitySection';
 import DocumentsSection from '../components/project-details/DocumentsSection';
 import MembersSection from '../components/project-details/MembersSection';
 import ProjectHeader from '../components/project-details/ProjectHeader';
@@ -364,6 +365,7 @@ return (
       onCancelEdit={cancelTaskEdit}
       onGenerate={handleGenerateTasks}
     />
+    <ActivitySection projectId={id} />
   </div>
 );
 };
