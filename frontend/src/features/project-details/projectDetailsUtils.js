@@ -27,6 +27,20 @@ export const normalizeDependencyIds = (dependencies = []) =>
     dependency?._id ? dependency._id.toString() : dependency.toString()
   );
 
+export const groupTasksByStatus = (tasks = []) => {
+  const groups = {
+    todo: [],
+    in_progress: [],
+    completed: [],
+  };
+
+  tasks.forEach((task) => {
+    if (groups[task.status]) groups[task.status].push(task);
+  });
+
+  return groups;
+};
+
 export const filterAndSortTasks = (tasks, { search, status, priority, sort }) => {
   const searchTerm = search.trim().toLowerCase();
   const filteredTasks = tasks.filter((task) => {

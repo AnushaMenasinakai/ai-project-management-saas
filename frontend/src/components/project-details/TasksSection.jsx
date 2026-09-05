@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import Alert from '../Alert';
 import Button from '../Button';
 import EmptyState from '../EmptyState';
 import LoadingState from '../LoadingState';
 import AITaskGenerator from './AITaskGenerator';
+import KanbanBoard from './KanbanBoard';
 import TaskCard from './TaskCard';
 
 const TasksSection = ({
@@ -38,15 +40,40 @@ const TasksSection = ({
   onDependenciesChange,
   onCancelEdit,
   onGenerate,
-}) => (
-  <section id="project-tasks" className="task-workspace workspace-section" aria-labelledby="tasks-heading">
+}) => {
+  const [viewMode, setViewMode] = useState('list');
+  const editFromBoard = (task) => {
+    setViewMode('list');
+    onStartEdit(task);
+  };
+
+  return (
+    <section id="project-tasks" className="task-workspace workspace-section" aria-labelledby="tasks-heading">
     <div className="workspace-section__header task-workspace__header">
       <div>
         <p className="section-eyebrow">Execution</p>
         <h2 id="tasks-heading">Tasks</h2>
         <p>{tasks.length} {tasks.length === 1 ? 'task' : 'tasks'} in this project.</p>
       </div>
-      <Button onClick={onShowCreate}>Create Task</Button>
+      <div className="task-workspace__header-actions">
+        <div className="task-view-toggle" role="group" aria-label="Task view">
+          <Button
+            variant={viewMode === 'list' ? 'primary' : 'secondary'}
+            aria-pressed={viewMode === 'list'}
+            onClick={() => setViewMode('list')}
+          >
+            List
+          </Button>
+          <Button
+            variant={viewMode === 'board' ? 'primary' : 'secondary'}
+            aria-pressed={viewMode === 'board'}
+            onClick={() => setViewMode('board')}
+          >
+            Board
+          </Button>
+        </div>
+        <Button onClick={onShowCreate}>Create Task</Button>
+      </div>
     </div>
     <AITaskGenerator {...aiState} onGenerate={onGenerate} />
     <div className="task-toolbar" aria-label="Task search, filters, and sorting">
@@ -73,34 +100,46 @@ const TasksSection = ({
         </select>
       </div>
     </div>
-    <div className="task-list-heading"><p className="section-eyebrow">Your tasks</p><span>{filteredTasks.length} shown</span></div>
+    {viewMode === 'list' && (
+      <div className="task-list-heading"><p className="section-eyebrow">Your tasks</p><span>{filteredTasks.length} shown</span></div>
+    )}
     {tasksLoading && <LoadingState message="Loading tasks..." />}
     {tasksError && <Alert>{tasksError}</Alert>}
-    {!tasksLoading && !tasksError && tasks.length === 0 && <EmptyState title="No tasks yet" description="Create a task or use AI task generation to start planning this project." />}
-    {!tasksLoading && !tasksError && tasks.length > 0 && filteredTasks.length === 0 && <EmptyState title="No matching tasks" description="Try changing the search term or filters." />}
-    {filteredTasks.map((task) => (
-      <TaskCard
-        key={task._id}
-        task={task}
-        tasks={tasks}
-        members={members}
+    {viewMode === 'list' && !tasksLoading && !tasksError && tasks.length === 0 && <EmptyState title="No tasks yet" description="Create a task or use AI task generation to start planning this project." />}
+    {viewMode === 'list' && !tasksLoading && !tasksError && tasks.length > 0 && filteredTasks.length === 0 && <EmptyState title="No matching tasks" description="Try changing the search term or filters." />}
+    {viewMode === 'list' && filteredTasks.map((task) => (
+        <TaskCard
+          key={task._id}
+          task={task}
+          tasks={tasks}
+          members={members}
+          isProjectOwner={isProjectOwner}
+          editingTaskId={editingTaskId}
+          editValues={editValues}
+          updatingTask={updatingTask}
+          editTaskError={editTaskError}
+          dependencyError={dependencyError}
+          statusVariant={statusVariant}
+          priorityVariant={priorityVariant}
+          formatLabel={formatLabel}
+          onStartEdit={onStartEdit}
+          onDelete={onDelete}
+          onUpdate={onUpdate}
+          onEditChange={onEditChange}
+          onDependenciesChange={onDependenciesChange}
+          onCancelEdit={onCancelEdit}
+        />
+    ))}
+    {viewMode === 'board' && !tasksLoading && !tasksError && (
+      <KanbanBoard
+        tasks={filteredTasks}
         isProjectOwner={isProjectOwner}
-        editingTaskId={editingTaskId}
-        editValues={editValues}
-        updatingTask={updatingTask}
-        editTaskError={editTaskError}
-        dependencyError={dependencyError}
-        statusVariant={statusVariant}
         priorityVariant={priorityVariant}
         formatLabel={formatLabel}
-        onStartEdit={onStartEdit}
+        onEdit={editFromBoard}
         onDelete={onDelete}
-        onUpdate={onUpdate}
-        onEditChange={onEditChange}
-        onDependenciesChange={onDependenciesChange}
-        onCancelEdit={onCancelEdit}
       />
-    ))}
+    )}
     {showTaskForm && (
       <form className="workspace-form task-create-form" onSubmit={onCreate}>
         <h3>Create Task</h3>
@@ -117,7 +156,8 @@ const TasksSection = ({
         </div>
       </form>
     )}
-  </section>
-);
+    </section>
+  );
+};
 
 export default TasksSection;

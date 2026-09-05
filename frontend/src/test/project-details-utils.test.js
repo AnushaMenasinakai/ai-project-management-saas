@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   filterAndSortTasks,
+  groupTasksByStatus,
   isProjectOwner,
   normalizeDependencyIds,
 } from '../features/project-details/projectDetailsUtils';
@@ -35,5 +36,23 @@ describe('project details utilities', () => {
   test('compares both populated and raw project owner values', () => {
     expect(isProjectOwner({ owner: { _id: 7 } }, { id: '7' })).toBe(true);
     expect(isProjectOwner({ owner: '7' }, { id: '8' })).toBe(false);
+  });
+
+  test('groups tasks by status without mutating their order', () => {
+    const source = [...tasks];
+    const grouped = groupTasksByStatus(tasks);
+
+    expect(grouped.todo.map((task) => task._id)).toEqual(['1', '3']);
+    expect(grouped.in_progress).toEqual([]);
+    expect(grouped.completed.map((task) => task._id)).toEqual(['2']);
+    expect(tasks).toEqual(source);
+  });
+
+  test('returns all empty groups for empty input', () => {
+    expect(groupTasksByStatus()).toEqual({
+      todo: [],
+      in_progress: [],
+      completed: [],
+    });
   });
 });
