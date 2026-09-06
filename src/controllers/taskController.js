@@ -3,6 +3,8 @@ const Task = require('../models/Task');
 const Comment = require('../models/Comment');
 const { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } = require('../constants/activityConstants');
 const { recordActivity, resolveActorSnapshot, resolveUserSnapshot } = require('../services/activityService');
+const { NOTIFICATION_ENTITY_TYPES, NOTIFICATION_TYPES } = require('../constants/notificationConstants');
+const { createNotification } = require('../services/notificationService');
 const { findProjectForCollaborator } = require('../services/projectAccessService');
 const {
   validateTaskAssignee,
@@ -295,6 +297,16 @@ exports.updateTask = async (req, res) => {
               } : {}),
               assigneeId: nextAssignee.id, assigneeName: nextAssignee.name,
             }, session,
+          });
+          if (assignmentChanged && nextAssignee) await createNotification({
+            recipient: nextAssignee.id,
+            actor: req.user.id,
+            project: project._id,
+            type: NOTIFICATION_TYPES.TASK_ASSIGNED,
+            entityType: NOTIFICATION_ENTITY_TYPES.TASK,
+            entityId: task._id,
+            entityName: updatedTask.title,
+            session,
           });
           if (assignmentChanged && !nextAssignee && previousAssignee) await recordActivity({
             project: project._id, ...actor, type: ACTIVITY_TYPES.TASK_UNASSIGNED,

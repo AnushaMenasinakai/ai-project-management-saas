@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } = require('../constants/activityConstants');
 const { recordActivity, resolveActorSnapshot, resolveUserSnapshot } = require('../services/activityService');
+const { NOTIFICATION_ENTITY_TYPES, NOTIFICATION_TYPES } = require('../constants/notificationConstants');
+const { createNotification } = require('../services/notificationService');
 const {
   findProjectForCollaborator,
   findProjectForOwner,
@@ -65,6 +67,16 @@ exports.addMember = async (req, res) => {
           project: project._id, ...actor, type: ACTIVITY_TYPES.MEMBER_ADDED,
           entityType: ACTIVITY_ENTITY_TYPES.MEMBER, entityId: user._id,
           entityName: user.name, session,
+        });
+        await createNotification({
+          recipient: user._id,
+          actor: req.user.id,
+          project: project._id,
+          type: NOTIFICATION_TYPES.PROJECT_MEMBER_ADDED,
+          entityType: NOTIFICATION_ENTITY_TYPES.PROJECT,
+          entityId: project._id,
+          entityName: project.name,
+          session,
         });
       });
     } finally {

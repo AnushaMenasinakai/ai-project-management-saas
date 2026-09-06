@@ -5,6 +5,7 @@ const Document = require('../models/Document');
 const DocumentChunk = require('../models/DocumentChunk');
 const Comment = require('../models/Comment');
 const Activity = require('../models/Activity');
+const Notification = require('../models/Notification');
 const { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } = require('../constants/activityConstants');
 const { recordActivity, resolveActorSnapshot } = require('../services/activityService');
 const {
@@ -235,6 +236,7 @@ const deleteProject = async (req, res) => {
         await Document.deleteMany({ project: project._id }, { session });
         await Comment.deleteMany({ project: project._id }, { session });
         await Activity.deleteMany({ project: project._id }, { session });
+        await Notification.deleteMany({ project: project._id }, { session });
         await Task.deleteMany({ project: project._id }, { session });
         await Project.deleteOne(
           { _id: project._id, owner: req.user.id },

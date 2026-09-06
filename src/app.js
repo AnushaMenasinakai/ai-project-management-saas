@@ -12,6 +12,7 @@ const documentRoutes = require('./routes/documentRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const commentRoutes = require('./routes/commentRoutes');
 const activityRoutes = require('./routes/activityRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 
 const app = express();
@@ -40,6 +41,7 @@ app.use('/api/health', healthRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/projects', projectMemberRoutes);
 app.use('/api/projects', activityRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api', aiRoutes);

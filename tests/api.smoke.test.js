@@ -17,6 +17,7 @@ const mockDatabase = {
   chunks: [],
   comments: [],
   activities: [],
+  notifications: [],
 };
 
 const mockIdsEqual = (left, right) =>
@@ -104,6 +105,9 @@ jest.mock('../src/models/Project', () => ({
     });
     return result;
   }),
+  findById: jest.fn(async (id) =>
+    mockDatabase.projects.find((project) => mockIdsEqual(project._id, id)) || null
+  ),
   findOneAndUpdate: jest.fn(async (query, updates) => {
     const project =
       mockDatabase.projects.find((candidate) =>
@@ -376,6 +380,78 @@ jest.mock('../src/models/Activity', () => ({
   }),
 }));
 
+jest.mock('../src/models/Notification', () => {
+  const safeSelect = (notification, fields) => {
+    if (!notification || !fields) return notification;
+    const selected = new Set(fields.split(/\s+/));
+    return Object.fromEntries(Object.entries(notification).filter(([key]) => selected.has(key)));
+  };
+  const matches = (notification, query) => {
+    if (query._id && !mockIdsEqual(notification._id, query._id)) return false;
+    if (query.recipient && !mockIdsEqual(notification.recipient, query.recipient)) return false;
+    if (Object.hasOwn(query, 'readAt') && query.readAt === null && notification.readAt !== null) return false;
+    if (!query.$or) return true;
+    return query.$or.some((condition) => {
+      if (condition.createdAt?.$lt) return notification.createdAt < condition.createdAt.$lt;
+      return notification.createdAt.getTime() === condition.createdAt.getTime()
+        && notification._id.toString() < condition._id.$lt.toString();
+    });
+  };
+  const selectable = (getValue) => {
+    let fields;
+    const promise = Promise.resolve().then(() => safeSelect(getValue(), fields));
+    promise.select = jest.fn((value) => { fields = value; return promise; });
+    return promise;
+  };
+  return {
+    create: jest.fn(async (input) => {
+      const values = Array.isArray(input) ? input : [input];
+      const created = values.map((data) => ({
+        _id: new mockMongoose.Types.ObjectId(), ...data, readAt: null, createdAt: new Date(),
+      }));
+      mockDatabase.notifications.push(...created);
+      return Array.isArray(input) ? created : created[0];
+    }),
+    find: jest.fn((query) => {
+      let fields;
+      let limit = Infinity;
+      const chain = {
+        select: jest.fn((value) => { fields = value; return chain; }),
+        sort: jest.fn(() => chain),
+        limit: jest.fn((value) => { limit = value; return chain; }),
+        lean: jest.fn(async () => mockDatabase.notifications.filter((item) => matches(item, query))
+          .sort((left, right) => right.createdAt - left.createdAt
+            || right._id.toString().localeCompare(left._id.toString()))
+          .slice(0, limit).map((item) => safeSelect(item, fields))),
+      };
+      return chain;
+    }),
+    countDocuments: jest.fn(async (query) =>
+      mockDatabase.notifications.filter((item) => matches(item, query)).length
+    ),
+    findOne: jest.fn((query) => selectable(() =>
+      mockDatabase.notifications.find((item) => matches(item, query)) || null
+    )),
+    findOneAndUpdate: jest.fn((query, updates) => selectable(() => {
+      const item = mockDatabase.notifications.find((candidate) => matches(candidate, query)) || null;
+      if (item) Object.assign(item, updates);
+      return item;
+    })),
+    updateMany: jest.fn(async (query, updates) => {
+      let modifiedCount = 0;
+      mockDatabase.notifications.forEach((item) => {
+        if (matches(item, query)) { Object.assign(item, updates); modifiedCount += 1; }
+      });
+      return { acknowledged: true, modifiedCount };
+    }),
+    deleteMany: jest.fn(async (query) => {
+      const before = mockDatabase.notifications.length;
+      mockDatabase.notifications = mockDatabase.notifications.filter((item) => !matches(item, query));
+      return { acknowledged: true, deletedCount: before - mockDatabase.notifications.length };
+    }),
+  };
+});
+
 jest.mock('../src/services/embeddingService', () => ({
   generateEmbedding: jest.fn(async () => [0.25, 0.5, 0.75]),
 }));
@@ -395,6 +471,7 @@ jest.spyOn(mockMongoose, 'startSession').mockResolvedValue({
       chunks: mockDatabase.chunks.map((chunk) => ({ ...chunk })),
       comments: mockDatabase.comments.map((comment) => ({ ...comment })),
       activities: mockDatabase.activities.map((activity) => ({ ...activity })),
+      notifications: mockDatabase.notifications.map((notification) => ({ ...notification })),
     };
 
     try {
@@ -434,6 +511,7 @@ const clearDatabase = async () => {
   mockDatabase.chunks.length = 0;
   mockDatabase.comments.length = 0;
   mockDatabase.activities.length = 0;
+  mockDatabase.notifications.length = 0;
 };
 
 const registerAndLogin = async (user = OWNER) => {
@@ -1070,6 +1148,187 @@ describe('activity log backend foundation', () => {
     await request(app).post(`/api/projects/${project._id}/activities`).set(authorization).send({}).expect(404);
     await request(app).patch('/api/activities/anything').set(authorization).send({}).expect(404);
     await request(app).delete('/api/activities/anything').set(authorization).expect(404);
+  });
+});
+
+describe('notification backend foundation', () => {
+  test('creates trusted member and assignment notifications without client-forged data', async () => {
+    const { member, owner, project } = await createCollaborationFixture();
+    const storedProject = mockDatabase.projects.find((item) => mockIdsEqual(item._id, project._id));
+    storedProject.members = [];
+
+    await request(app).post(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ email: member.user.email, recipient: owner.user.id, actorName: 'Forged' })
+      .expect(200);
+    const task = await createProjectTask(owner.token, project._id, 'Notification task');
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ assignedTo: member.user.id, notification: { type: 'forged' } }).expect(200);
+
+    expect(mockDatabase.notifications).toHaveLength(2);
+    expect(mockDatabase.notifications[0]).toMatchObject({
+      recipient: expect.anything(), actorName: OWNER.name,
+      projectName: project.name, type: 'project_member_added',
+      entityType: 'project', entityName: project.name, metadata: {},
+    });
+    expect(mockDatabase.notifications[1]).toMatchObject({
+      actorName: OWNER.name, type: 'task_assigned', entityType: 'task',
+      entityName: 'Notification task', metadata: {},
+    });
+    expect(mockIdsEqual(mockDatabase.notifications[1].recipient, member.user.id)).toBe(true);
+    expect(JSON.stringify(mockDatabase.notifications)).not.toContain(member.user.email);
+    expect(JSON.stringify(mockDatabase.notifications)).not.toContain('Forged');
+  });
+
+  test('suppresses self assignment, avoids same-assignee duplicates, and notifies only a new reassignee', async () => {
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(member.token, project._id, 'Responsibility');
+
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${member.token}`).send({ assignedTo: member.user.id }).expect(200);
+    expect(mockDatabase.notifications).toHaveLength(0);
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ assignedTo: member.user.id }).expect(200);
+    expect(mockDatabase.notifications).toHaveLength(0);
+
+    await request(app).post(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ email: outsider.user.email }).expect(200);
+    const beforeReassignment = mockDatabase.notifications.length;
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ assignedTo: outsider.user.id }).expect(200);
+    const reassignment = mockDatabase.notifications.slice(beforeReassignment);
+    expect(reassignment).toHaveLength(1);
+    expect(mockIdsEqual(reassignment[0].recipient, outsider.user.id)).toBe(true);
+  });
+
+  test('returns only the authenticated inbox with deterministic cursor pagination', async () => {
+    const owner = await registerAndLogin(OWNER);
+    const member = await registerAndLogin(MEMBER);
+    const project = await createOwnedProject(owner.token);
+    const createStored = (recipient, name, createdAt) => mockDatabase.notifications.push({
+      _id: new mockMongoose.Types.ObjectId(), recipient, actor: owner.user.id,
+      actorName: OWNER.name, project: project._id, projectName: project.name,
+      type: 'task_assigned', entityType: 'task', entityId: new mockMongoose.Types.ObjectId(),
+      entityName: name, metadata: {}, readAt: null, createdAt: new Date(createdAt), privateValue: 'hidden',
+    });
+    createStored(owner.user.id, 'Older', '2026-01-01T00:00:00.000Z');
+    createStored(owner.user.id, 'Newer', '2026-01-02T00:00:00.000Z');
+    createStored(member.user.id, 'Other inbox', '2026-01-03T00:00:00.000Z');
+
+    const first = await request(app).get('/api/notifications?limit=1')
+      .set('Authorization', `Bearer ${owner.token}`).expect(200);
+    expect(first.body.notifications.map((item) => item.entityName)).toEqual(['Newer']);
+    expect(first.body.notifications[0]).not.toHaveProperty('privateValue');
+    expect(first.body.nextCursor).toEqual(expect.any(String));
+    const second = await request(app)
+      .get(`/api/notifications?limit=1&cursor=${encodeURIComponent(first.body.nextCursor)}`)
+      .set('Authorization', `Bearer ${owner.token}`).expect(200);
+    expect(second.body.notifications.map((item) => item.entityName)).toEqual(['Older']);
+    expect(second.body.nextCursor).toBeNull();
+    await request(app).get('/api/notifications').expect(401);
+    for (const value of ['0', '101', '1.5', 'bad']) {
+      await request(app).get(`/api/notifications?limit=${value}`)
+        .set('Authorization', `Bearer ${owner.token}`).expect(400);
+    }
+    await request(app).get('/api/notifications?cursor=bad')
+      .set('Authorization', `Bearer ${owner.token}`).expect(400);
+    await request(app).get('/api/notifications?limit=100')
+      .set('Authorization', `Bearer ${owner.token}`).expect(200);
+  });
+
+  test('counts unread and marks one or all read without crossing recipient boundaries', async () => {
+    const { member, owner, project } = await createCollaborationFixture();
+    const now = new Date('2026-01-01T00:00:00.000Z');
+    const seed = (recipient, readAt = null) => ({
+      _id: new mockMongoose.Types.ObjectId(), recipient, actor: owner.user.id,
+      actorName: OWNER.name, project: project._id, projectName: project.name,
+      type: 'task_assigned', entityType: 'task', entityId: new mockMongoose.Types.ObjectId(),
+      entityName: 'Inbox task', metadata: {}, readAt, createdAt: new Date(),
+    });
+    const unread = seed(member.user.id);
+    const secondUnread = seed(member.user.id);
+    const alreadyRead = seed(member.user.id, now);
+    const other = seed(owner.user.id);
+    mockDatabase.notifications.push(unread, secondUnread, alreadyRead, other);
+
+    await request(app).get('/api/notifications/unread-count')
+      .set('Authorization', `Bearer ${member.token}`).expect(200, { unreadCount: 2 });
+    await request(app).patch(`/api/notifications/${other._id}/read`)
+      .set('Authorization', `Bearer ${member.token}`).expect(404);
+    await request(app).patch('/api/notifications/not-an-id/read')
+      .set('Authorization', `Bearer ${member.token}`).expect(400);
+    const marked = await request(app).patch(`/api/notifications/${unread._id}/read`)
+      .set('Authorization', `Bearer ${member.token}`).expect(200);
+    const firstReadAt = marked.body.notification.readAt;
+    const again = await request(app).patch(`/api/notifications/${unread._id}/read`)
+      .set('Authorization', `Bearer ${member.token}`).expect(200);
+    expect(again.body.notification.readAt).toBe(firstReadAt);
+    const all = await request(app).patch('/api/notifications/read-all')
+      .set('Authorization', `Bearer ${member.token}`).expect(200);
+    expect(all.body.modifiedCount).toBe(1);
+    const allAgain = await request(app).patch('/api/notifications/read-all')
+      .set('Authorization', `Bearer ${member.token}`).expect(200);
+    expect(allAgain.body.modifiedCount).toBe(0);
+    expect(alreadyRead.readAt).toEqual(now);
+    expect(other.readAt).toBeNull();
+  });
+
+  test('rolls back assignment and member addition when notification persistence fails', async () => {
+    const Notification = require('../src/models/Notification');
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id, 'Atomic notification');
+    const activityCount = mockDatabase.activities.length;
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    Notification.create.mockRejectedValueOnce(new Error('notification failed'));
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ assignedTo: member.user.id }).expect(500);
+    expect(mockDatabase.tasks.find((item) => mockIdsEqual(item._id, task._id)).assignedTo).toBeUndefined();
+    expect(mockDatabase.activities).toHaveLength(activityCount);
+
+    Notification.create.mockRejectedValueOnce(new Error('notification failed'));
+    await request(app).post(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ email: outsider.user.email }).expect(500);
+    expect(mockDatabase.projects.find((item) => mockIdsEqual(item._id, project._id)).members
+      .some((id) => mockIdsEqual(id, outsider.user.id))).toBe(false);
+    consoleError.mockRestore();
+  });
+
+  test('retains task/member notifications but removes project notifications transactionally', async () => {
+    const Notification = require('../src/models/Notification');
+    const Project = require('../src/models/Project');
+    const { member, owner, project } = await createCollaborationFixture();
+    const storedProject = mockDatabase.projects.find((item) => mockIdsEqual(item._id, project._id));
+    storedProject.members = [];
+    await request(app).post(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ email: member.user.email }).expect(200);
+    const task = await createProjectTask(owner.token, project._id, 'Historical notification');
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ assignedTo: member.user.id }).expect(200);
+    await request(app).delete(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).expect(200);
+    await request(app).delete(`/api/projects/${project._id}/members/${member.user.id}`)
+      .set('Authorization', `Bearer ${owner.token}`).expect(200);
+    expect(mockDatabase.notifications).toHaveLength(2);
+
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    Project.deleteOne.mockRejectedValueOnce(new Error('delete failed'));
+    await request(app).delete(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).expect(500);
+    expect(mockDatabase.notifications).toHaveLength(2);
+    await request(app).delete(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).expect(200);
+    expect(mockDatabase.notifications).toHaveLength(0);
+    expect(Notification.deleteMany.mock.calls.at(-1)[1]).toEqual({ session: expect.any(Object) });
+    consoleError.mockRestore();
+  });
+
+  test('exposes no public notification create, delete, or arbitrary update route', async () => {
+    const { token } = await registerAndLogin();
+    const headers = { Authorization: `Bearer ${token}` };
+    await request(app).post('/api/notifications').set(headers).send({}).expect(404);
+    await request(app).delete('/api/notifications/anything').set(headers).expect(404);
+    await request(app).patch('/api/notifications/anything').set(headers).send({}).expect(404);
   });
 });
 
