@@ -298,6 +298,25 @@ exports.updateTask = async (req, res) => {
               assigneeId: nextAssignee.id, assigneeName: nextAssignee.name,
             }, session,
           });
+          if (assignmentChanged && !nextAssignee && previousAssignee) await recordActivity({
+            project: project._id, ...actor, type: ACTIVITY_TYPES.TASK_UNASSIGNED,
+            entityType: ACTIVITY_ENTITY_TYPES.TASK, entityId: task._id,
+            entityName: updatedTask.title,
+            metadata: {
+              previousAssigneeId: previousAssignee.id,
+              previousAssigneeName: previousAssignee.name,
+            }, session,
+          });
+          if (assignmentChanged && previousAssignee) await createNotification({
+            recipient: previousAssignee.id,
+            actor: req.user.id,
+            project: project._id,
+            type: NOTIFICATION_TYPES.TASK_UNASSIGNED,
+            entityType: NOTIFICATION_ENTITY_TYPES.TASK,
+            entityId: task._id,
+            entityName: updatedTask.title,
+            session,
+          });
           if (assignmentChanged && nextAssignee) await createNotification({
             recipient: nextAssignee.id,
             actor: req.user.id,
@@ -308,14 +327,16 @@ exports.updateTask = async (req, res) => {
             entityName: updatedTask.title,
             session,
           });
-          if (assignmentChanged && !nextAssignee && previousAssignee) await recordActivity({
-            project: project._id, ...actor, type: ACTIVITY_TYPES.TASK_UNASSIGNED,
-            entityType: ACTIVITY_ENTITY_TYPES.TASK, entityId: task._id,
+          if (statusChanged && updatedTask.assignedTo) await createNotification({
+            recipient: idValue(updatedTask.assignedTo),
+            actor: req.user.id,
+            project: project._id,
+            type: NOTIFICATION_TYPES.ASSIGNED_TASK_STATUS_CHANGED,
+            entityType: NOTIFICATION_ENTITY_TYPES.TASK,
+            entityId: task._id,
             entityName: updatedTask.title,
-            metadata: {
-              previousAssigneeId: previousAssignee.id,
-              previousAssigneeName: previousAssignee.name,
-            }, session,
+            metadata: { from: previous.status, to: updatedTask.status },
+            session,
           });
           if (otherChangedFields.length > 0) await recordActivity({
             project: project._id, ...actor, type: ACTIVITY_TYPES.TASK_UPDATED,

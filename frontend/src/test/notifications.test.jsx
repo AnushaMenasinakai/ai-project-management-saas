@@ -6,7 +6,7 @@ import NotificationsProvider from '../context/NotificationsProvider';
 import { NotificationsContext } from '../context/NotificationsContext';
 import Notifications from '../pages/Notifications';
 import api from '../services/api';
-import { formatNotificationMessage, getNotificationTarget } from '../utils/notificationUtils';
+import { formatNotificationMessage, formatNotificationStatus, getNotificationTarget } from '../utils/notificationUtils';
 
 const mockUser = { id: 'user-1', name: 'Member' };
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mockUser }) }));
@@ -74,6 +74,24 @@ describe('notification center', () => {
     expect(screen.getAllByRole('link', { name: 'View project' })[0]).toHaveAttribute('href', `/projects/${projectId}#project-tasks`);
     expect(formatNotificationMessage({ type: 'future_type', actorName: 'Owner', projectName: 'Orbit', metadata: { secret: 'hidden' } })).toBe('Owner updated something in Orbit.');
     expect(getNotificationTarget({ type: 'task_assigned', project: '../unsafe' })).toBeNull();
+  });
+
+  test('formats expanded task notifications with friendly safe status labels and task navigation', () => {
+    expect(formatNotificationMessage({
+      type: 'task_unassigned', actorName: 'Owner', entityName: 'Build Dashboard', projectName: 'Orbit',
+    })).toBe('Owner unassigned you from Build Dashboard.');
+    expect(formatNotificationMessage({
+      type: 'assigned_task_status_changed', actorName: 'Owner', entityName: 'Build Dashboard',
+      projectName: 'Orbit', metadata: { from: 'todo', to: 'in_progress' },
+    })).toBe('Owner moved Build Dashboard from To Do to In Progress.');
+    expect(formatNotificationMessage({
+      type: 'assigned_task_status_changed', actorName: 'Owner', entityName: 'Build Dashboard',
+      projectName: 'Orbit', metadata: { from: '<unsafe>', to: null },
+    })).toBe('Owner moved Build Dashboard from an unknown status to an unknown status.');
+    expect(formatNotificationStatus('completed')).toBe('Completed');
+    for (const type of ['task_unassigned', 'assigned_task_status_changed']) {
+      expect(getNotificationTarget({ type, project: projectId })).toBe(`/projects/${projectId}#project-tasks`);
+    }
   });
 
   test('marks one notification only after success and preserves unread state on failure', async () => {

@@ -1181,7 +1181,7 @@ describe('notification backend foundation', () => {
     expect(JSON.stringify(mockDatabase.notifications)).not.toContain('Forged');
   });
 
-  test('suppresses self assignment, avoids same-assignee duplicates, and notifies only a new reassignee', async () => {
+  test('suppresses self assignment, avoids same-assignee duplicates, and notifies both sides of reassignment', async () => {
     const { member, outsider, owner, project } = await createCollaborationFixture();
     const task = await createProjectTask(member.token, project._id, 'Responsibility');
 
@@ -1198,8 +1198,118 @@ describe('notification backend foundation', () => {
     await request(app).patch(`/api/tasks/${task._id}`)
       .set('Authorization', `Bearer ${owner.token}`).send({ assignedTo: outsider.user.id }).expect(200);
     const reassignment = mockDatabase.notifications.slice(beforeReassignment);
-    expect(reassignment).toHaveLength(1);
-    expect(mockIdsEqual(reassignment[0].recipient, outsider.user.id)).toBe(true);
+    expect(reassignment).toHaveLength(2);
+    expect(reassignment.map((item) => item.type)).toEqual(['task_unassigned', 'task_assigned']);
+    expect(mockIdsEqual(reassignment[0].recipient, member.user.id)).toBe(true);
+    expect(mockIdsEqual(reassignment[1].recipient, outsider.user.id)).toBe(true);
+  });
+
+  test('applies self-suppression independently for reassignment and explicit unassignment', async () => {
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+    await request(app).post(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ email: outsider.user.email }).expect(200);
+    const task = await createProjectTask(owner.token, project._id, 'Self suppression');
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ assignedTo: member.user.id }).expect(200);
+
+    mockDatabase.notifications = [];
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${member.token}`).send({ assignedTo: outsider.user.id }).expect(200);
+    expect(mockDatabase.notifications).toHaveLength(1);
+    expect(mockDatabase.notifications[0].type).toBe('task_assigned');
+    expect(mockIdsEqual(mockDatabase.notifications[0].recipient, outsider.user.id)).toBe(true);
+
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ assignedTo: member.user.id }).expect(200);
+    mockDatabase.notifications = [];
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${outsider.token}`).send({ assignedTo: outsider.user.id }).expect(200);
+    expect(mockDatabase.notifications).toHaveLength(1);
+    expect(mockDatabase.notifications[0].type).toBe('task_unassigned');
+    expect(mockIdsEqual(mockDatabase.notifications[0].recipient, member.user.id)).toBe(true);
+
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ assignedTo: member.user.id }).expect(200);
+    mockDatabase.notifications = [];
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${member.token}`).send({ assignedTo: null }).expect(200);
+    expect(mockDatabase.notifications).toHaveLength(0);
+  });
+
+  test('notifies only the final assignee about real status changes', async () => {
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+    await request(app).post(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ email: outsider.user.email }).expect(200);
+    const task = await createProjectTask(owner.token, project._id, 'Status recipient');
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ assignedTo: member.user.id }).expect(200);
+
+    mockDatabase.notifications = [];
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ assignedTo: outsider.user.id, status: 'in_progress', priority: 'high' }).expect(200);
+    expect(mockDatabase.notifications.map((item) => item.type)).toEqual([
+      'task_unassigned', 'task_assigned', 'assigned_task_status_changed',
+    ]);
+    expect(mockIdsEqual(mockDatabase.notifications[2].recipient, outsider.user.id)).toBe(true);
+    expect(mockDatabase.notifications[2].metadata).toEqual({ from: 'todo', to: 'in_progress' });
+
+    mockDatabase.notifications = [];
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${outsider.token}`).send({ status: 'completed' }).expect(200);
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ status: 'completed' }).expect(200);
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ title: 'Ordinary update' }).expect(200);
+    expect(mockDatabase.notifications).toHaveLength(0);
+
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ assignedTo: null, status: 'todo' }).expect(200);
+    expect(mockDatabase.notifications).toHaveLength(1);
+    expect(mockDatabase.notifications[0].type).toBe('task_unassigned');
+
+    mockDatabase.notifications = [];
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ status: 'in_progress' }).expect(200);
+    expect(mockDatabase.notifications).toHaveLength(0);
+  });
+
+  test('sends assignment and status notifications together for an initial final assignee', async () => {
+    const { member, owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id, 'Initial combined change');
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ assignedTo: member.user.id, status: 'in_progress' }).expect(200);
+    expect(mockDatabase.notifications.map((item) => item.type)).toEqual([
+      'task_assigned', 'assigned_task_status_changed',
+    ]);
+  });
+
+  test('rolls back a multi-change task patch when a later notification fails', async () => {
+    const Notification = require('../src/models/Notification');
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+    await request(app).post(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ email: outsider.user.email }).expect(200);
+    const task = await createProjectTask(owner.token, project._id, 'Atomic multi-notification');
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ assignedTo: member.user.id }).expect(200);
+    const originalCreate = Notification.create.getMockImplementation();
+    const activityCount = mockDatabase.activities.length;
+    const notificationCount = mockDatabase.notifications.length;
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    Notification.create.mockImplementationOnce(originalCreate)
+      .mockRejectedValueOnce(new Error('second notification failed'));
+
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ assignedTo: outsider.user.id, status: 'in_progress', priority: 'high' }).expect(500);
+    const storedTask = mockDatabase.tasks.find((item) => mockIdsEqual(item._id, task._id));
+    expect(mockIdsEqual(storedTask.assignedTo, member.user.id)).toBe(true);
+    expect(storedTask.status).toBe('todo');
+    expect(storedTask.priority).toBe('medium');
+    expect(mockDatabase.activities).toHaveLength(activityCount);
+    expect(mockDatabase.notifications).toHaveLength(notificationCount);
+    consoleError.mockRestore();
   });
 
   test('returns only the authenticated inbox with deterministic cursor pagination', async () => {

@@ -6,9 +6,31 @@ const {
   NOTIFICATION_TYPES,
 } = require('../constants/notificationConstants');
 
+const STATUS_VALUES = new Set(['todo', 'in_progress', 'completed']);
+
+const normalizeEmptyMetadata = (metadata) => {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)
+    || Object.keys(metadata).length > 0) {
+    throw new Error('Notification metadata must be empty for this type.');
+  }
+  return {};
+};
+
+const normalizeStatusMetadata = (metadata) => {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)
+    || Object.keys(metadata).sort().join(',') !== 'from,to'
+    || !STATUS_VALUES.has(metadata.from) || !STATUS_VALUES.has(metadata.to)
+    || metadata.from === metadata.to) {
+    throw new Error('Invalid task status notification metadata.');
+  }
+  return { from: metadata.from, to: metadata.to };
+};
+
 const metadataNormalizers = {
-  [NOTIFICATION_TYPES.TASK_ASSIGNED]: () => ({}),
-  [NOTIFICATION_TYPES.PROJECT_MEMBER_ADDED]: () => ({}),
+  [NOTIFICATION_TYPES.TASK_ASSIGNED]: normalizeEmptyMetadata,
+  [NOTIFICATION_TYPES.TASK_UNASSIGNED]: normalizeEmptyMetadata,
+  [NOTIFICATION_TYPES.PROJECT_MEMBER_ADDED]: normalizeEmptyMetadata,
+  [NOTIFICATION_TYPES.ASSIGNED_TASK_STATUS_CHANGED]: normalizeStatusMetadata,
 };
 
 const createNotification = async ({
