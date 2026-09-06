@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const Task = require('../models/Task');
 const Comment = require('../models/Comment');
 const { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } = require('../constants/activityConstants');
-const { recordActivity, resolveActorSnapshot } = require('../services/activityService');
+const { recordActivity, resolveActorSnapshot, resolveUserSnapshot } = require('../services/activityService');
 const { findProjectForCollaborator } = require('../services/projectAccessService');
 const {
   validateTaskAssignee,
@@ -239,12 +239,35 @@ exports.updateTask = async (req, res) => {
       updates.dependencies = dependencyResult.value;
     }
 
-    const previousStatus = task.status;
-    const statusChanged = status !== undefined && status !== previousStatus;
+    const previous = {
+      title: task.title, description: task.description, status: task.status,
+      priority: task.priority, dueDate: task.dueDate,
+      assignedTo: task.assignedTo, dependencies: task.dependencies || [],
+    };
+    const idValue = (value) => value?._id?.toString?.() || value?.toString?.() || '';
+    const dateValue = (value) => value ? new Date(value).toISOString() : '';
+    const dependencyValue = (value = []) => value.map(idValue).sort().join(',');
+    const statusChanged = status !== undefined && status !== previous.status;
+    const assignmentChanged = assignedTo !== undefined
+      && idValue(updates.assignedTo) !== idValue(previous.assignedTo);
+    const otherChangedFields = [
+      ['title', (value) => String(value ?? '')],
+      ['description', (value) => String(value ?? '')],
+      ['priority', (value) => String(value ?? '')],
+      ['dueDate', dateValue],
+      ['dependencies', dependencyValue],
+    ].filter(([field, normalize]) => Object.hasOwn(updates, field)
+      && normalize(updates[field]) !== normalize(previous[field]))
+      .map(([field]) => field);
+    const hasActivity = statusChanged || assignmentChanged || otherChangedFields.length > 0;
     let updatedTask;
 
-    if (statusChanged) {
+    if (hasActivity) {
       const actor = await resolveActorSnapshot(req.user.id);
+      const previousAssignee = assignmentChanged && previous.assignedTo
+        ? await resolveUserSnapshot(idValue(previous.assignedTo)) : null;
+      const nextAssignee = assignmentChanged && updates.assignedTo
+        ? await resolveUserSnapshot(idValue(updates.assignedTo)) : null;
       const session = await mongoose.startSession();
 
       try {
@@ -255,15 +278,38 @@ exports.updateTask = async (req, res) => {
             { new: true, runValidators: true, session }
           );
 
-          await recordActivity({
-            project: project._id,
-            ...actor,
-            type: ACTIVITY_TYPES.TASK_STATUS_CHANGED,
-            entityType: ACTIVITY_ENTITY_TYPES.TASK,
-            entityId: task._id,
+          if (statusChanged) await recordActivity({
+            project: project._id, ...actor, type: ACTIVITY_TYPES.TASK_STATUS_CHANGED,
+            entityType: ACTIVITY_ENTITY_TYPES.TASK, entityId: task._id,
             entityName: updatedTask.title,
-            metadata: { from: previousStatus, to: updatedTask.status },
-            session,
+            metadata: { from: previous.status, to: updatedTask.status }, session,
+          });
+          if (assignmentChanged && nextAssignee) await recordActivity({
+            project: project._id, ...actor, type: ACTIVITY_TYPES.TASK_ASSIGNED,
+            entityType: ACTIVITY_ENTITY_TYPES.TASK, entityId: task._id,
+            entityName: updatedTask.title,
+            metadata: {
+              ...(previousAssignee ? {
+                previousAssigneeId: previousAssignee.id,
+                previousAssigneeName: previousAssignee.name,
+              } : {}),
+              assigneeId: nextAssignee.id, assigneeName: nextAssignee.name,
+            }, session,
+          });
+          if (assignmentChanged && !nextAssignee && previousAssignee) await recordActivity({
+            project: project._id, ...actor, type: ACTIVITY_TYPES.TASK_UNASSIGNED,
+            entityType: ACTIVITY_ENTITY_TYPES.TASK, entityId: task._id,
+            entityName: updatedTask.title,
+            metadata: {
+              previousAssigneeId: previousAssignee.id,
+              previousAssigneeName: previousAssignee.name,
+            }, session,
+          });
+          if (otherChangedFields.length > 0) await recordActivity({
+            project: project._id, ...actor, type: ACTIVITY_TYPES.TASK_UPDATED,
+            entityType: ACTIVITY_ENTITY_TYPES.TASK, entityId: task._id,
+            entityName: updatedTask.title,
+            metadata: { changedFields: otherChangedFields }, session,
           });
         });
       } finally {
@@ -323,6 +369,7 @@ exports.deleteTask = async (req, res) => {
     }
 
     const session = await mongoose.startSession();
+    const actor = await resolveActorSnapshot(req.user.id);
 
     try {
       await session.withTransaction(async () => {
@@ -335,6 +382,11 @@ exports.deleteTask = async (req, res) => {
           { task: task._id, project: project._id },
           { session }
         );
+        await recordActivity({
+          project: project._id, ...actor, type: ACTIVITY_TYPES.TASK_DELETED,
+          entityType: ACTIVITY_ENTITY_TYPES.TASK, entityId: task._id,
+          entityName: task.title, session,
+        });
         await Task.findByIdAndDelete(id, { session });
       });
     } finally {

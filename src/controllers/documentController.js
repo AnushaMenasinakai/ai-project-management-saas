@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const Document = require('../models/Document');
 const DocumentChunk = require('../models/DocumentChunk');
 const { prepareDocumentChunks } = require('../services/documentChunkService');
+const { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } = require('../constants/activityConstants');
+const { recordActivity, resolveActorSnapshot } = require('../services/activityService');
 const {
   findProjectForCollaborator,
   findProjectForOwner,
@@ -39,6 +41,7 @@ exports.createDocument = async (req, res) => {
     }
 
     const preparedChunks = await prepareDocumentChunks(content);
+    const actor = await resolveActorSnapshot(req.user.id);
 
     const session = await mongoose.startSession();
     let document;
@@ -62,6 +65,11 @@ exports.createDocument = async (req, res) => {
         }));
 
         await DocumentChunk.insertMany(chunkDocuments, { session });
+        await recordActivity({
+          project: existingProject._id, ...actor, type: ACTIVITY_TYPES.DOCUMENT_CREATED,
+          entityType: ACTIVITY_ENTITY_TYPES.DOCUMENT, entityId: document._id,
+          entityName: document.title, session,
+        });
       });
     } finally {
       await session.endSession();
@@ -208,9 +216,13 @@ exports.updateDocument = async (req, res) => {
       updates.sourceType = sourceType;
     }
 
+    const comparable = (value) => String(value ?? '');
+    const changedFields = Object.keys(updates).filter(
+      (field) => comparable(document[field]) !== comparable(updates[field])
+    );
     let updatedDocument;
 
-    if (content === undefined) {
+    if (content === undefined && changedFields.length === 0) {
       updatedDocument = await Document.findByIdAndUpdate(
         id,
         updates,
@@ -220,12 +232,11 @@ exports.updateDocument = async (req, res) => {
         }
       );
     } else {
-      const preparedChunks = await prepareDocumentChunks(content);
-      const chunkDocuments = preparedChunks.map((chunk) => ({
-        document: document._id,
-        project: document.project,
-        ...chunk,
-      }));
+      const preparedChunks = content === undefined ? null : await prepareDocumentChunks(content);
+      const chunkDocuments = preparedChunks?.map((chunk) => ({
+        document: document._id, project: document.project, ...chunk,
+      })) || [];
+      const actor = changedFields.length > 0 ? await resolveActorSnapshot(req.user.id) : null;
 
       const session = await mongoose.startSession();
 
@@ -241,12 +252,16 @@ exports.updateDocument = async (req, res) => {
             }
           );
 
-          await DocumentChunk.deleteMany(
-            { document: id },
-            { session }
-          );
-
-          await DocumentChunk.insertMany(chunkDocuments, { session });
+          if (content !== undefined) {
+            await DocumentChunk.deleteMany({ document: id }, { session });
+            await DocumentChunk.insertMany(chunkDocuments, { session });
+          }
+          if (changedFields.length > 0) await recordActivity({
+            project: project._id, ...actor, type: ACTIVITY_TYPES.DOCUMENT_UPDATED,
+            entityType: ACTIVITY_ENTITY_TYPES.DOCUMENT, entityId: document._id,
+            entityName: updatedDocument.title,
+            metadata: { changedFields }, session,
+          });
         });
       } finally {
         await session.endSession();
@@ -294,6 +309,7 @@ exports.deleteDocument = async (req, res) => {
     }
 
     const session = await mongoose.startSession();
+    const actor = await resolveActorSnapshot(req.user.id);
 
     try {
       await session.withTransaction(async () => {
@@ -301,6 +317,12 @@ exports.deleteDocument = async (req, res) => {
           { document: id },
           { session }
         );
+
+        await recordActivity({
+          project: project._id, ...actor, type: ACTIVITY_TYPES.DOCUMENT_DELETED,
+          entityType: ACTIVITY_ENTITY_TYPES.DOCUMENT, entityId: document._id,
+          entityName: document.title, session,
+        });
 
         await Document.findByIdAndDelete(id, { session });
       });

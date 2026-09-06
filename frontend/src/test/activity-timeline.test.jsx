@@ -65,6 +65,29 @@ describe('Activity timeline', () => {
     })).toBe('Owner updated Archived item.');
   });
 
+  test('formats expanded semantic events without exposing raw metadata', () => {
+    const event = (type, entityName, metadata = {}) => ({ type, actorName: 'Owner', entityName, metadata });
+    expect(formatActivityMessage(event('project_updated', 'Orbit', { changedFields: ['name', 'dueDate'] })))
+      .toBe('Owner updated name and due date on project Orbit.');
+    expect(formatActivityMessage(event('task_updated', 'Dashboard', { changedFields: ['priority', 'dependencies'] })))
+      .toBe('Owner updated priority and dependencies on Dashboard.');
+    expect(formatActivityMessage(event('task_assigned', 'Dashboard', { assigneeName: 'Member' })))
+      .toBe('Owner assigned Dashboard to Member.');
+    expect(formatActivityMessage(event('task_unassigned', 'Dashboard', { previousAssigneeName: 'Member' })))
+      .toBe('Owner unassigned Member from Dashboard.');
+    expect(formatActivityMessage(event('task_deleted', 'Old task'))).toBe('Owner deleted task Old task.');
+    expect(formatActivityMessage(event('member_added', 'Member'))).toBe('Owner added Member to the project.');
+    expect(formatActivityMessage(event('member_removed', 'Member'))).toBe('Owner removed Member from the project.');
+    expect(formatActivityMessage(event('document_created', 'Brief'))).toBe('Owner added document Brief.');
+    expect(formatActivityMessage(event('document_updated', 'Brief', { changedFields: ['title'] })))
+      .toBe('Owner updated title on document Brief.');
+    expect(formatActivityMessage(event('document_deleted', 'Brief'))).toBe('Owner deleted document Brief.');
+    expect(formatActivityMessage(event('ai_tasks_generated', 'Orbit', { count: 1 })))
+      .toBe('Owner generated 1 task with AI.');
+    expect(formatActivityMessage(event('ai_tasks_generated', 'Orbit', { count: 5 })))
+      .toBe('Owner generated 5 tasks with AI.');
+  });
+
   test('does not fetch eagerly and loads a semantic accessible timeline when opened', async () => {
     let resolveRequest;
     api.get.mockReturnValueOnce(new Promise((resolve) => { resolveRequest = resolve; }));

@@ -154,14 +154,44 @@ const updateProject = async (req, res) => {
       return res.status(400).json({ message: 'Project name cannot be empty.' });
     }
 
-    const project = await Project.findOneAndUpdate(
-      { _id: id, owner: req.user.id },
-      updates,
-      { new: true, runValidators: true }
-    );
-
-    if (!project) {
+    const existingProject = await findProjectForOwner(id, req.user.id);
+    if (!existingProject) {
       return res.status(404).json({ message: 'Project not found.' });
+    }
+
+    const comparable = (value) => value instanceof Date ? value.toISOString() : String(value ?? '');
+    const changedFields = Object.keys(updates).filter(
+      (field) => comparable(existingProject[field]) !== comparable(updates[field])
+    );
+    let project;
+
+    if (changedFields.length > 0) {
+      const actor = await resolveActorSnapshot(req.user.id);
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          project = await Project.findOneAndUpdate(
+            { _id: id, owner: req.user.id }, updates,
+            { new: true, runValidators: true, session }
+          );
+          await recordActivity({
+            project: project._id, ...actor,
+            type: ACTIVITY_TYPES.PROJECT_UPDATED,
+            entityType: ACTIVITY_ENTITY_TYPES.PROJECT,
+            entityId: project._id,
+            entityName: project.name,
+            metadata: { changedFields },
+            session,
+          });
+        });
+      } finally {
+        await session.endSession();
+      }
+    } else {
+      project = await Project.findOneAndUpdate(
+        { _id: id, owner: req.user.id }, updates,
+        { new: true, runValidators: true }
+      );
     }
 
     return res.status(200).json({ project });

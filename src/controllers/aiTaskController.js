@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const Task = require('../models/Task');
 const { generateProjectTasks } = require('../services/aiTaskService');
 const { findProjectForCollaborator } = require('../services/projectAccessService');
+const { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } = require('../constants/activityConstants');
+const { recordActivity, resolveActorSnapshot } = require('../services/activityService');
 
 exports.generateTasks = async (req, res) => {
   try {
@@ -25,6 +27,7 @@ exports.generateTasks = async (req, res) => {
       project.name,
       project.description
     );
+    const actor = await resolveActorSnapshot(req.user.id);
 
     const taskDocuments = tasks.map((task) => ({
       title: task.title,
@@ -75,6 +78,12 @@ exports.generateTasks = async (req, res) => {
         })
           .sort({ createdAt: 1 })
           .session(session);
+
+        await recordActivity({
+          project: project._id, ...actor, type: ACTIVITY_TYPES.AI_TASKS_GENERATED,
+          entityType: ACTIVITY_ENTITY_TYPES.AI, entityId: project._id,
+          entityName: project.name, metadata: { count: createdTasks.length }, session,
+        });
       });
     } finally {
       await session.endSession();

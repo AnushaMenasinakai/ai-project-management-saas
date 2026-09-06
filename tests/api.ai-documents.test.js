@@ -416,6 +416,13 @@ describe('AI task generation regressions', () => {
     expect(mockGenerateContent.mock.calls[0][0].contents).toContain(
       'Project description: No project description was provided.'
     );
+    expect(mockDatabase.activities.filter((activity) => activity.type === 'ai_tasks_generated')).toEqual([
+      expect.objectContaining({
+        type: 'ai_tasks_generated', actorName: fixture[role].user.name,
+        entityType: 'ai', entityName: fixture.project.name,
+        metadata: { count: 5 },
+      }),
+    ]);
   });
 
   test('rejects an unrelated user before invoking Gemini', async () => {
@@ -472,6 +479,24 @@ describe('AI task generation regressions', () => {
 
     expect(mockDatabase.tasks).toHaveLength(0);
     expect(mockSession.endSession).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  test('rolls back generated tasks when aggregate activity persistence fails', async () => {
+    const Activity = require('../src/models/Activity');
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { owner, project } = await createFixture();
+    mockGenerateContent.mockResolvedValueOnce({ text: JSON.stringify(generatedTasks()) });
+    Activity.create.mockRejectedValueOnce(new Error('activity write failed'));
+
+    await request(app)
+      .post(`/api/projects/${project._id}/ai/generate-tasks`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(500, { message: 'Failed to generate AI tasks.' });
+
+    expect(mockDatabase.tasks).toHaveLength(0);
+    expect(mockDatabase.activities.filter((activity) => activity.type === 'ai_tasks_generated')).toHaveLength(0);
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1);
     consoleError.mockRestore();
   });
 });

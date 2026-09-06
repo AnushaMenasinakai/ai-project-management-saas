@@ -830,7 +830,126 @@ describe('activity log backend foundation', () => {
       .send({ priority: 'high' })
       .expect(200);
 
-    expect(mockDatabase.activities).toHaveLength(initialCount + 1);
+    expect(mockDatabase.activities).toHaveLength(initialCount + 2);
+    expect(mockDatabase.activities.at(-1)).toMatchObject({
+      type: 'task_updated',
+      metadata: { changedFields: ['priority'] },
+    });
+  });
+
+  test('records project, member, and document events with trusted snapshots and no content leakage', async () => {
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+    const initialCount = mockDatabase.activities.length;
+
+    await request(app).patch(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ name: 'Renamed Project', description: 'Private project description' }).expect(200);
+    await request(app).post(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ email: outsider.user.email }).expect(200);
+    await request(app).delete(`/api/projects/${project._id}/members/${outsider.user.id}`)
+      .set('Authorization', `Bearer ${owner.token}`).expect(200);
+    const document = await createProjectDocument(owner.token, project._id);
+    await request(app).patch(`/api/documents/${document._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'Renamed Document', content: 'Sensitive replacement body' }).expect(200);
+    await request(app).delete(`/api/documents/${document._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).expect(200);
+
+    const events = mockDatabase.activities.slice(initialCount);
+    expect(events.map((event) => event.type)).toEqual([
+      'project_updated', 'member_added', 'member_removed',
+      'document_created', 'document_updated', 'document_deleted',
+    ]);
+    expect(events[0]).toMatchObject({
+      actorName: OWNER.name, entityName: 'Renamed Project',
+      metadata: { changedFields: ['name', 'description'] },
+    });
+    expect(events[1].entityName).toBe(OUTSIDER.name);
+    expect(events[2].entityName).toBe(OUTSIDER.name);
+    expect(events[4]).toMatchObject({
+      entityName: 'Renamed Document', metadata: { changedFields: ['title', 'content'] },
+    });
+    expect(JSON.stringify(events)).not.toContain('Sensitive replacement body');
+    expect(mockDatabase.activities.some((event) => event.type.startsWith('comment_'))).toBe(false);
+  });
+
+  test('records semantic task update, assignment, unassignment, and deletion events', async () => {
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id, 'Semantic task');
+    await request(app).post(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ email: outsider.user.email }).expect(200);
+    const initialCount = mockDatabase.activities.length;
+
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ status: 'in_progress', assignedTo: member.user.id, priority: 'high', title: 'Renamed task' })
+      .expect(200);
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ assignedTo: outsider.user.id }).expect(200);
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ assignedTo: null }).expect(200);
+    await request(app).delete(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).expect(200);
+
+    const events = mockDatabase.activities.slice(initialCount);
+    expect(events.map((event) => event.type)).toEqual([
+      'task_status_changed', 'task_assigned', 'task_updated', 'task_assigned',
+      'task_unassigned', 'task_deleted',
+    ]);
+    expect(events[1].metadata).toMatchObject({ assigneeName: MEMBER.name });
+    expect(events[2]).toMatchObject({
+      entityName: 'Renamed task', metadata: { changedFields: ['title', 'priority'] },
+    });
+    expect(events[3].metadata).toMatchObject({
+      previousAssigneeName: MEMBER.name, assigneeName: OUTSIDER.name,
+    });
+    expect(events[4].metadata).toMatchObject({ previousAssigneeName: OUTSIDER.name });
+    expect(events[5]).toMatchObject({ entityName: 'Renamed task' });
+    expect(mockDatabase.activities.some((event) => mockIdsEqual(event.entityId, task._id))).toBe(true);
+  });
+
+  test('does not record no-op project or task updates', async () => {
+    const { owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id, 'No-op task');
+    const initialCount = mockDatabase.activities.length;
+    await request(app).patch(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ name: project.name }).expect(200);
+    await request(app).patch(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ title: task.title }).expect(200);
+    expect(mockDatabase.activities).toHaveLength(initialCount);
+  });
+
+  test('rolls back task deletion and document creation when activity persistence fails', async () => {
+    const Activity = require('../src/models/Activity');
+    const { owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id, 'Rollback deletion');
+    const dependent = await createProjectTask(owner.token, project._id, 'Dependent task');
+    mockDatabase.tasks.find((item) => mockIdsEqual(item._id, dependent._id)).dependencies = [task._id];
+    await createTaskComment(owner.token, task._id, 'Must survive.');
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    Activity.create.mockRejectedValueOnce(new Error('Task deletion activity failed'));
+    await request(app).delete(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).expect(500);
+    expect(mockDatabase.tasks.some((item) => mockIdsEqual(item._id, task._id))).toBe(true);
+    expect(mockDatabase.tasks.find((item) => mockIdsEqual(item._id, dependent._id)).dependencies)
+      .toEqual([expect.anything()]);
+    expect(mockDatabase.comments.some((comment) => mockIdsEqual(comment.task, task._id))).toBe(true);
+
+    const documentCount = mockDatabase.documents.length;
+    const chunkCount = mockDatabase.chunks.length;
+    Activity.create.mockRejectedValueOnce(new Error('Document activity failed'));
+    await request(app).post('/api/documents')
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'Rollback document', content: 'Do not persist.', project: project._id, sourceType: 'text' })
+      .expect(500);
+    expect(mockDatabase.documents).toHaveLength(documentCount);
+    expect(mockDatabase.chunks).toHaveLength(chunkCount);
+    consoleError.mockRestore();
   });
 
   test('rolls back database-only mutations when activity recording fails', async () => {

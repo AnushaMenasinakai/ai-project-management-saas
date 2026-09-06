@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
+const { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } = require('../constants/activityConstants');
+const { recordActivity, resolveActorSnapshot, resolveUserSnapshot } = require('../services/activityService');
 const {
   findProjectForCollaborator,
   findProjectForOwner,
@@ -53,9 +55,21 @@ exports.addMember = async (req, res) => {
       });
     }
 
-    project.members.push(user._id);
-
-    await project.save();
+    const actor = await resolveActorSnapshot(req.user.id);
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        project.members.push(user._id);
+        await project.save({ session });
+        await recordActivity({
+          project: project._id, ...actor, type: ACTIVITY_TYPES.MEMBER_ADDED,
+          entityType: ACTIVITY_ENTITY_TYPES.MEMBER, entityId: user._id,
+          entityName: user.name, session,
+        });
+      });
+    } finally {
+      await session.endSession();
+    }
 
     return res.status(200).json({
       message: 'Member added successfully.',
@@ -137,11 +151,24 @@ exports.removeMember = async (req, res) => {
       });
     }
 
-    project.members = project.members.filter(
-      (memberId) => memberId.toString() !== userId
-    );
-
-    await project.save();
+    const actor = await resolveActorSnapshot(req.user.id);
+    const member = await resolveUserSnapshot(userId);
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        project.members = project.members.filter(
+          (memberId) => memberId.toString() !== userId
+        );
+        await project.save({ session });
+        await recordActivity({
+          project: project._id, ...actor, type: ACTIVITY_TYPES.MEMBER_REMOVED,
+          entityType: ACTIVITY_ENTITY_TYPES.MEMBER, entityId: userId,
+          entityName: member?.name || 'Former member', session,
+        });
+      });
+    } finally {
+      await session.endSession();
+    }
 
     return res.status(200).json({
       message: 'Member removed successfully.',
