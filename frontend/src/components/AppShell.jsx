@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Button from './Button';
 import ProductBrand from './ProductBrand';
+import NotificationBell from './NotificationBell';
 
 const AppShell = () => {
   const { user, logout } = useAuth();
@@ -52,16 +53,19 @@ const AppShell = () => {
         <NavLink className="app-shell__mobile-brand" to="/dashboard">
           <ProductBrand />
         </NavLink>
-        <button
-          className="app-shell__menu-button"
-          type="button"
-          aria-controls="primary-sidebar"
-          aria-expanded={mobileMenuOpen}
-          aria-label="Open navigation menu"
-          onClick={() => setMobileMenuOpen(true)}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
-        </button>
+        <div className="app-shell__mobile-actions">
+          <NotificationBell className="notification-bell--mobile" />
+          <button
+            className="app-shell__menu-button"
+            type="button"
+            aria-controls="primary-sidebar"
+            aria-expanded={mobileMenuOpen}
+            aria-label="Open navigation menu"
+            onClick={() => setMobileMenuOpen(true)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
+        </div>
       </header>
 
       {mobileMenuOpen && (
@@ -120,6 +124,7 @@ const AppShell = () => {
         </nav>
 
         <div className="app-shell__account">
+          <NotificationBell className="notification-bell--desktop" />
           <div className="app-shell__user">
             <span className="app-shell__avatar" aria-hidden="true">
               {userInitial}

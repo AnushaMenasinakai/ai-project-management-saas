@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Projects from './pages/Projects';
 import ProjectDetails from './pages/ProjectDetails';
 import AppShell from './components/AppShell';
+import Notifications from './pages/Notifications';
 
 const App = () => {
   return (
@@ -23,6 +24,7 @@ const App = () => {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/projects/:id" element={<ProjectDetails />} />
+          <Route path="/notifications" element={<Notifications />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
