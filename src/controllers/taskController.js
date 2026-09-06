@@ -251,8 +251,8 @@ exports.updateTask = async (req, res) => {
     const assignmentChanged = assignedTo !== undefined
       && idValue(updates.assignedTo) !== idValue(previous.assignedTo);
     const otherChangedFields = [
-      ['title', (value) => String(value ?? '')],
-      ['description', (value) => String(value ?? '')],
+      ['title', (value) => typeof value === 'string' ? value.trim() : String(value ?? '')],
+      ['description', (value) => typeof value === 'string' ? value.trim() : String(value ?? '')],
       ['priority', (value) => String(value ?? '')],
       ['dueDate', dateValue],
       ['dependencies', dependencyValue],

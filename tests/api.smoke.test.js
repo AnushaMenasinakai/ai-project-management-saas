@@ -915,12 +915,21 @@ describe('activity log backend foundation', () => {
   test('does not record no-op project or task updates', async () => {
     const { owner, project } = await createCollaborationFixture();
     const task = await createProjectTask(owner.token, project._id, 'No-op task');
+    const document = await createProjectDocument(owner.token, project._id);
     const initialCount = mockDatabase.activities.length;
     await request(app).patch(`/api/projects/${project._id}`)
-      .set('Authorization', `Bearer ${owner.token}`).send({ name: project.name }).expect(200);
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ name: `  ${project.name}  `, dueDate: '2026-09-06T00:00:00.000Z' }).expect(200);
+    mockDatabase.projects.find((item) => mockIdsEqual(item._id, project._id)).dueDate = new Date('2026-09-06T00:00:00.000Z');
+    const afterInitialDate = mockDatabase.activities.length;
+    await request(app).patch(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ dueDate: '2026-09-06' }).expect(200);
+    expect(mockDatabase.activities).toHaveLength(afterInitialDate);
     await request(app).patch(`/api/tasks/${task._id}`)
-      .set('Authorization', `Bearer ${owner.token}`).send({ title: task.title }).expect(200);
-    expect(mockDatabase.activities).toHaveLength(initialCount);
+      .set('Authorization', `Bearer ${owner.token}`).send({ title: ` ${task.title} ` }).expect(200);
+    await request(app).patch(`/api/documents/${document._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ title: ` ${document.title} ` }).expect(200);
+    expect(mockDatabase.activities).toHaveLength(initialCount + 1);
   });
 
   test('rolls back task deletion and document creation when activity persistence fails', async () => {
@@ -949,6 +958,43 @@ describe('activity log backend foundation', () => {
       .expect(500);
     expect(mockDatabase.documents).toHaveLength(documentCount);
     expect(mockDatabase.chunks).toHaveLength(chunkCount);
+    consoleError.mockRestore();
+  });
+
+  test('keeps project, membership, and document mutations atomic with activity writes', async () => {
+    const Activity = require('../src/models/Activity');
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+    const document = await createProjectDocument(owner.token, project._id);
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    Activity.create.mockRejectedValueOnce(new Error('Project update activity failed'));
+    await request(app).patch(`/api/projects/${project._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ name: 'Must roll back' }).expect(500);
+    expect(mockDatabase.projects.find((item) => mockIdsEqual(item._id, project._id)).name)
+      .toBe(project.name);
+
+    Activity.create.mockRejectedValueOnce(new Error('Member add activity failed'));
+    await request(app).post(`/api/projects/${project._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ email: outsider.user.email }).expect(500);
+    expect(mockDatabase.projects.find((item) => mockIdsEqual(item._id, project._id)).members)
+      .not.toContainEqual(expect.objectContaining({ _id: outsider.user.id }));
+
+    Activity.create.mockRejectedValueOnce(new Error('Member remove activity failed'));
+    await request(app).delete(`/api/projects/${project._id}/members/${member.user.id}`)
+      .set('Authorization', `Bearer ${owner.token}`).expect(500);
+    expect(mockDatabase.projects.find((item) => mockIdsEqual(item._id, project._id)).members
+      .some((id) => mockIdsEqual(id, member.user.id))).toBe(true);
+
+    Activity.create.mockRejectedValueOnce(new Error('Document update activity failed'));
+    await request(app).patch(`/api/documents/${document._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).send({ title: 'Must roll back' }).expect(500);
+    expect(mockDatabase.documents.find((item) => mockIdsEqual(item._id, document._id)).title)
+      .toBe(document.title);
+
+    Activity.create.mockRejectedValueOnce(new Error('Document deletion activity failed'));
+    await request(app).delete(`/api/documents/${document._id}`)
+      .set('Authorization', `Bearer ${owner.token}`).expect(500);
+    expect(mockDatabase.documents.some((item) => mockIdsEqual(item._id, document._id))).toBe(true);
     consoleError.mockRestore();
   });
 

@@ -159,9 +159,17 @@ const updateProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found.' });
     }
 
-    const comparable = (value) => value instanceof Date ? value.toISOString() : String(value ?? '');
+    const comparable = (field, value) => {
+      if (['startDate', 'dueDate'].includes(field)) {
+        return value ? new Date(value).toISOString() : '';
+      }
+      if (['name', 'description'].includes(field) && typeof value === 'string') {
+        return value.trim();
+      }
+      return String(value ?? '');
+    };
     const changedFields = Object.keys(updates).filter(
-      (field) => comparable(existingProject[field]) !== comparable(updates[field])
+      (field) => comparable(field, existingProject[field]) !== comparable(field, updates[field])
     );
     let project;
 

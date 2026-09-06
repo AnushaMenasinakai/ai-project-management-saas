@@ -216,9 +216,11 @@ exports.updateDocument = async (req, res) => {
       updates.sourceType = sourceType;
     }
 
-    const comparable = (value) => String(value ?? '');
+    const comparable = (field, value) => (
+      field === 'title' && typeof value === 'string' ? value.trim() : String(value ?? '')
+    );
     const changedFields = Object.keys(updates).filter(
-      (field) => comparable(document[field]) !== comparable(updates[field])
+      (field) => comparable(field, document[field]) !== comparable(field, updates[field])
     );
     let updatedDocument;
 
