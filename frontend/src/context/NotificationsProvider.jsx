@@ -5,27 +5,31 @@ import { NotificationsContext } from './NotificationsContext';
 
 const NotificationsProvider = ({ children }) => {
   const { user } = useAuth();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const userId = user?._id || user?.id || null;
+  const [unreadState, setUnreadState] = useState({ userId: null, count: 0 });
   const requestIdRef = useRef(0);
 
   const refreshUnreadCount = useCallback(async () => {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    if (!user) {
-      setUnreadCount(0);
+    if (!userId) {
+      setUnreadState({ userId: null, count: 0 });
       return false;
     }
 
     try {
       const response = await api.get('/notifications/unread-count');
       if (requestId === requestIdRef.current) {
-        setUnreadCount(Math.max(0, Number(response.data.unreadCount) || 0));
+        setUnreadState({
+          userId,
+          count: Math.max(0, Number(response.data.unreadCount) || 0),
+        });
       }
       return true;
     } catch {
       return false;
     }
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     const timer = window.setTimeout(refreshUnreadCount, 0);
@@ -35,12 +39,17 @@ const NotificationsProvider = ({ children }) => {
     };
   }, [refreshUnreadCount]);
 
+  const unreadCount = unreadState.userId === userId ? unreadState.count : 0;
   const value = useMemo(() => ({
     unreadCount,
     refreshUnreadCount,
-    decrementUnreadCount: () => setUnreadCount((count) => Math.max(0, count - 1)),
-    clearUnreadCount: () => setUnreadCount(0),
-  }), [refreshUnreadCount, unreadCount]);
+    decrementUnreadCount: () => setUnreadState((current) => (
+      current.userId === userId
+        ? { ...current, count: Math.max(0, current.count - 1) }
+        : current
+    )),
+    clearUnreadCount: () => setUnreadState({ userId, count: 0 }),
+  }), [refreshUnreadCount, unreadCount, userId]);
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
 };

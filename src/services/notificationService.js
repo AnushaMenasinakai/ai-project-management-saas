@@ -44,16 +44,16 @@ const createNotification = async ({
   metadata = {},
   session,
 }) => {
-  if (!recipient || !actor || recipient.toString() === actor.toString()) return null;
-
   const normalizeMetadata = metadataNormalizers[type];
   if (!normalizeMetadata) throw new Error(`Unsupported notification type: ${type}.`);
   if (!Object.values(NOTIFICATION_ENTITY_TYPES).includes(entityType)) {
     throw new Error(`Unsupported notification entity type: ${entityType}.`);
   }
-  if (!project || !entityId || !entityName?.trim()) {
-    throw new Error('Notification requires project, entityId, and entityName.');
+  if (!recipient || !actor || !project || !entityId || !entityName?.trim()) {
+    throw new Error('Notification requires recipient, actor, project, entityId, and entityName.');
   }
+  const normalizedMetadata = normalizeMetadata(metadata);
+  if (recipient.toString() === actor.toString()) return null;
 
   const [recipientUser, actorUser, projectDocument] = await Promise.all([
     User.findById(recipient),
@@ -74,7 +74,7 @@ const createNotification = async ({
     entityType,
     entityId,
     entityName: entityName.trim(),
-    metadata: normalizeMetadata(metadata),
+    metadata: normalizedMetadata,
   };
 
   if (session) {

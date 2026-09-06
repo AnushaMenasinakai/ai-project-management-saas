@@ -50,4 +50,18 @@ describe('notification service metadata contracts', () => {
       from: 'todo', to: 'todo',
     })).rejects.toThrow('Invalid task status notification metadata');
   });
+
+  test('validates the service contract before intentional self-suppression', async () => {
+    await expect(createNotification({
+      recipient: actor, actor, project, type: 'client_forged',
+      entityType: NOTIFICATION_ENTITY_TYPES.TASK,
+      entityId, entityName: 'Build Dashboard', metadata: {},
+    })).rejects.toThrow('Unsupported notification type');
+    await expect(createNotification({
+      recipient: actor, actor, project, type: NOTIFICATION_TYPES.TASK_ASSIGNED,
+      entityType: NOTIFICATION_ENTITY_TYPES.TASK,
+      entityId, entityName: 'Build Dashboard', metadata: {},
+    })).resolves.toBeNull();
+    expect(Notification.create).not.toHaveBeenCalled();
+  });
 });

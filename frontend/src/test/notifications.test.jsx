@@ -8,7 +8,7 @@ import Notifications from '../pages/Notifications';
 import api from '../services/api';
 import { formatNotificationMessage, formatNotificationStatus, getNotificationTarget } from '../utils/notificationUtils';
 
-const mockUser = { id: 'user-1', name: 'Member' };
+let mockUser = { id: 'user-1', name: 'Member' };
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: mockUser }) }));
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), patch: vi.fn() } }));
 
@@ -33,6 +33,7 @@ const renderPage = (context = {}) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockUser = { id: 'user-1', name: 'Member' };
   api.get.mockResolvedValue({ data: { notifications: [], nextCursor: null } });
 });
 
@@ -50,6 +51,23 @@ describe('notification center', () => {
     render(<NotificationsProvider><MemoryRouter><><NotificationBell /><NotificationBell /></></MemoryRouter></NotificationsProvider>);
     expect(await screen.findAllByRole('link', { name: 'Notifications, no unread notifications' })).toHaveLength(2);
     expect(screen.queryByText('99+')).not.toBeInTheDocument();
+  });
+
+  test('never exposes a previous account count during account switches or logout', async () => {
+    api.get.mockResolvedValueOnce({ data: { unreadCount: 7 } });
+    api.get.mockReturnValueOnce(new Promise(() => {}));
+    const bells = () => <NotificationsProvider><MemoryRouter><NotificationBell /></MemoryRouter></NotificationsProvider>;
+    const view = render(bells());
+    expect(await screen.findByRole('link', { name: 'Notifications, 7 unread' })).toBeInTheDocument();
+
+    mockUser = { id: 'user-2', name: 'Another member' };
+    view.rerender(bells());
+    expect(screen.getByRole('link', { name: 'Notifications, no unread notifications' })).toBeInTheDocument();
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+
+    mockUser = null;
+    view.rerender(bells());
+    expect(screen.getByRole('link', { name: 'Notifications, no unread notifications' })).toBeInTheDocument();
   });
 
   test('renders loading, empty, error and retry states', async () => {
