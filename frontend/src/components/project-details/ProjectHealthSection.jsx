@@ -49,8 +49,9 @@ const ProjectHealthSection = ({ projectId }) => {
   const hasTasks = Boolean(metrics?.totalTasks);
   const insightIsStale = Boolean(insight && health?.asOf && healthAsOf !== health.asOf);
   const handleGenerateInsight = async () => {
+    const healthAsOfAtRequest = health?.asOf;
     const result = await generateInsight();
-    if (result?.health) setHealthSnapshot(result.health);
+    if (result?.health) setHealthSnapshot(result.health, healthAsOfAtRequest);
   };
 
   return (

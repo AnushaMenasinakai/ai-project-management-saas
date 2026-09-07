@@ -252,6 +252,30 @@ describe('Project health dashboard', () => {
     expect(screen.getByText('Focus on the blocked dashboard task.')).toBeInTheDocument();
   });
 
+  test('does not let a pending insight replace a newer refreshed health snapshot', async () => {
+    let resolveInsight;
+    const refreshedHealth = {
+      ...health,
+      asOf: '2026-09-07T14:00:00.000Z',
+      metrics: { ...health.metrics, completedTasks: 2, completionPercentage: 50 },
+    };
+    api.get
+      .mockResolvedValueOnce({ data: { health } })
+      .mockResolvedValueOnce({ data: { health: refreshedHealth } });
+    api.post.mockReturnValueOnce(new Promise((resolve) => { resolveInsight = resolve; }));
+    renderSection();
+    fireEvent.click(screen.getByRole('button', { name: 'Load health' }));
+    await screen.findByText('At Risk');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate AI insight' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(await screen.findByText('50%')).toBeInTheDocument();
+
+    resolveInsight({ data: insightResponse });
+    expect(await screen.findByText('Focus on the blocked dashboard task.')).toBeInTheDocument();
+    expect(screen.getByText('50%')).toBeInTheDocument();
+    expect(screen.getByText(/health data has changed since this insight was generated/i)).toBeInTheDocument();
+  });
+
   test('does not apply a pending insight response after switching projects', async () => {
     let resolveInsight;
     api.post.mockReturnValueOnce(new Promise((resolve) => { resolveInsight = resolve; }));

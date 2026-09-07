@@ -71,10 +71,11 @@ const useProjectHealth = (projectId) => {
     initializedProjectIdRef.current = null;
   }, [projectId]);
 
-  const setHealthSnapshot = useCallback((health) => {
+  const setHealthSnapshot = useCallback((health, expectedCurrentAsOf) => {
     if (!health) return;
     setResource((current) => (
       current.projectId === projectId
+        && (!expectedCurrentAsOf || current.health?.asOf === expectedCurrentAsOf)
         ? { ...current, health, loading: false, error: '', refreshError: '' }
         : current
     ));
