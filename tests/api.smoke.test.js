@@ -8,6 +8,8 @@ process.env.GEMINI_MODEL = 'test-gemini-model';
 process.env.FRONTEND_ORIGIN = 'http://localhost:5173';
 const mockMongoose = require('mongoose');
 const request = require('supertest');
+const mockGenerateProjectTasks = jest.fn();
+const mockGenerateRagAnswer = jest.fn();
 
 const mockDatabase = {
   users: [],
@@ -19,6 +21,13 @@ const mockDatabase = {
   activities: [],
   notifications: [],
 };
+
+jest.mock('../src/services/aiTaskService', () => ({
+  generateProjectTasks: mockGenerateProjectTasks,
+}));
+jest.mock('../src/services/ragService', () => ({
+  generateRagAnswer: mockGenerateRagAnswer,
+}));
 
 const mockIdsEqual = (left, right) =>
   left !== undefined && right !== undefined && left.toString() === right.toString();
@@ -1148,6 +1157,59 @@ describe('activity log backend foundation', () => {
     await request(app).post(`/api/projects/${project._id}/activities`).set(authorization).send({}).expect(404);
     await request(app).patch('/api/activities/anything').set(authorization).send({}).expect(404);
     await request(app).delete('/api/activities/anything').set(authorization).expect(404);
+  });
+});
+
+describe('project health API', () => {
+  test('returns isolated deterministic health for owner and member without mutations', async () => {
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id, 'Health task');
+    const storedTask = mockDatabase.tasks.find((item) => mockIdsEqual(item._id, task._id));
+    storedTask.priority = 'high';
+    storedTask.assignedTo = null;
+    storedTask.description = 'Must never appear in health output.';
+    const otherProject = await createOwnedProject(outsider.token);
+    await createProjectTask(outsider.token, otherProject._id, 'Isolated task');
+    const before = JSON.stringify({
+      projects: mockDatabase.projects,
+      tasks: mockDatabase.tasks,
+      activities: mockDatabase.activities,
+      notifications: mockDatabase.notifications,
+    });
+
+    const ownerResponse = await request(app).get(`/api/projects/${project._id}/health`)
+      .set('Authorization', `Bearer ${owner.token}`).expect(200);
+    const memberResponse = await request(app).get(`/api/projects/${project._id}/health`)
+      .set('Authorization', `Bearer ${member.token}`).expect(200);
+    expect(ownerResponse.body.health).toMatchObject({
+      status: 'at_risk',
+      project: { _id: project._id.toString(), name: project.name, status: project.status },
+      metrics: {
+        totalTasks: 1, completedTasks: 0, inProgressTasks: 0, todoTasks: 1,
+        incompleteTasks: 1, completionPercentage: 0, highPriorityIncompleteTasks: 1,
+        unassignedIncompleteTasks: 1,
+      },
+    });
+    expect(memberResponse.body.health.metrics).toEqual(ownerResponse.body.health.metrics);
+    expect(ownerResponse.body.health.attentionTasks[0]).toEqual(expect.objectContaining({
+      _id: task._id.toString(), title: 'Health task', issues: expect.arrayContaining(['high_priority', 'unassigned']),
+    }));
+    expect(JSON.stringify(ownerResponse.body)).not.toContain('Must never appear');
+    expect(JSON.stringify(ownerResponse.body)).not.toContain('Isolated task');
+    expect(JSON.stringify({
+      projects: mockDatabase.projects,
+      tasks: mockDatabase.tasks,
+      activities: mockDatabase.activities,
+      notifications: mockDatabase.notifications,
+    })).toBe(before);
+    expect(mockGenerateProjectTasks).not.toHaveBeenCalled();
+    expect(mockGenerateRagAnswer).not.toHaveBeenCalled();
+
+    await request(app).get(`/api/projects/${project._id}/health`)
+      .set('Authorization', `Bearer ${outsider.token}`).expect(404);
+    await request(app).get('/api/projects/not-an-id/health')
+      .set('Authorization', `Bearer ${owner.token}`).expect(404);
+    await request(app).get(`/api/projects/${project._id}/health`).expect(401);
   });
 });
 
