@@ -71,6 +71,15 @@ const useProjectHealth = (projectId) => {
     initializedProjectIdRef.current = null;
   }, [projectId]);
 
+  const setHealthSnapshot = useCallback((health) => {
+    if (!health) return;
+    setResource((current) => (
+      current.projectId === projectId
+        ? { ...current, health, loading: false, error: '', refreshError: '' }
+        : current
+    ));
+  }, [projectId]);
+
   const isCurrentProject = resource.projectId === projectId;
 
   return {
@@ -80,6 +89,7 @@ const useProjectHealth = (projectId) => {
     error: isCurrentProject ? resource.error : '',
     refreshError: isCurrentProject ? resource.refreshError : '',
     fetchHealth,
+    setHealthSnapshot,
   };
 };
 

@@ -53,6 +53,16 @@ const emptyHealth = {
   attentionTasks: [],
 };
 
+const insightResponse = {
+  health,
+  insight: {
+    summary: 'Focus on the blocked dashboard task.',
+    keyConcerns: ['One task is blocked.', '<script>plain text concern</script>'],
+    suggestedActions: ['Complete the API dependency.'],
+  },
+  generatedAt: '2026-09-07T13:00:00.000Z',
+};
+
 const renderSection = (projectId = 'project-1') => render(
   <ProjectHealthSection projectId={projectId} />,
 );
@@ -60,6 +70,7 @@ const renderSection = (projectId = 'project-1') => render(
 beforeEach(() => {
   vi.clearAllMocks();
   api.get.mockResolvedValue({ data: { health } });
+  api.post.mockResolvedValue({ data: insightResponse });
   Element.prototype.scrollIntoView = vi.fn();
 });
 
@@ -179,5 +190,78 @@ describe('Project health dashboard', () => {
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
     expect(screen.queryByText('Insufficient Data')).not.toBeInTheDocument();
     expect(api.get).toHaveBeenLastCalledWith('/projects/project-2/health');
+  });
+
+  test('generates insight only on explicit action and prevents duplicate pending requests', async () => {
+    let resolveInsight;
+    api.post.mockReturnValueOnce(new Promise((resolve) => { resolveInsight = resolve; }));
+    renderSection();
+    fireEvent.click(screen.getByRole('button', { name: 'Load health' }));
+    await screen.findByText('At Risk');
+    expect(api.post).not.toHaveBeenCalled();
+
+    const generate = screen.getByRole('button', { name: 'Generate AI insight' });
+    fireEvent.click(generate);
+    fireEvent.click(generate);
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledWith('/projects/project-1/health/insight');
+    expect(screen.getByRole('status')).toHaveTextContent('Generating AI health insight...');
+    expect(screen.getByRole('button', { name: 'Generating...' })).toBeDisabled();
+
+    resolveInsight({ data: insightResponse });
+    expect(await screen.findByText('Focus on the blocked dashboard task.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Key concerns' })).toBeInTheDocument();
+    expect(screen.getByText('One task is blocked.')).toBeInTheDocument();
+    expect(screen.getByText('<script>plain text concern</script>')).toBeInTheDocument();
+    expect(document.querySelector('script')).toBeNull();
+    expect(screen.getByText('Complete the API dependency.')).toBeInTheDocument();
+    expect(screen.getByText(/review AI suggestions before acting/i)).toBeInTheDocument();
+    expect(screen.getByText(/Generated/).querySelector('time')).toHaveAttribute(
+      'datetime', '2026-09-07T13:00:00.000Z',
+    );
+  });
+
+  test('preserves health on AI failure and supports retry', async () => {
+    api.post
+      .mockRejectedValueOnce({ response: { data: { message: 'Insight unavailable.' } } })
+      .mockResolvedValueOnce({ data: insightResponse });
+    renderSection();
+    fireEvent.click(screen.getByRole('button', { name: 'Load health' }));
+    await screen.findByText('At Risk');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate AI insight' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Insight unavailable.');
+    expect(screen.getByText('Ship a very long dashboard name')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Focus on the blocked dashboard task.')).toBeInTheDocument();
+    expect(api.post).toHaveBeenCalledTimes(2);
+  });
+
+  test('labels retained insight stale after a successful health refresh', async () => {
+    const refreshedHealth = { ...health, asOf: '2026-09-07T14:00:00.000Z' };
+    api.get
+      .mockResolvedValueOnce({ data: { health } })
+      .mockResolvedValueOnce({ data: { health: refreshedHealth } });
+    renderSection();
+    fireEvent.click(screen.getByRole('button', { name: 'Load health' }));
+    await screen.findByText('At Risk');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate AI insight' }));
+    await screen.findByText('Focus on the blocked dashboard task.');
+    expect(screen.queryByText(/health data has changed since/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(await screen.findByText(/health data has changed since this insight was generated/i)).toBeInTheDocument();
+    expect(screen.getByText('Focus on the blocked dashboard task.')).toBeInTheDocument();
+  });
+
+  test('does not apply a pending insight response after switching projects', async () => {
+    let resolveInsight;
+    api.post.mockReturnValueOnce(new Promise((resolve) => { resolveInsight = resolve; }));
+    const view = renderSection();
+    fireEvent.click(screen.getByRole('button', { name: 'Load health' }));
+    await screen.findByText('At Risk');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate AI insight' }));
+    view.rerender(<ProjectHealthSection projectId="project-2" />);
+    resolveInsight({ data: insightResponse });
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('Focus on the blocked dashboard task.')).not.toBeInTheDocument();
   });
 });

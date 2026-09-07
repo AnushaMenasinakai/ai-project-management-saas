@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import useProjectHealth from '../../hooks/useProjectHealth';
+import useProjectHealthInsight from '../../hooks/useProjectHealthInsight';
 import {
   formatHealthIssue,
   formatHealthPriority,
@@ -30,8 +31,11 @@ const metricItems = [
 
 const ProjectHealthSection = ({ projectId }) => {
   const {
-    health, initialized, loading, error, refreshError, fetchHealth,
+    health, initialized, loading, error, refreshError, fetchHealth, setHealthSnapshot,
   } = useProjectHealth(projectId);
+  const {
+    insight, generatedAt, healthAsOf, generating, error: insightError, generateInsight,
+  } = useProjectHealthInsight(projectId);
 
   useEffect(() => {
     const openFromNavigation = (event) => {
@@ -43,6 +47,11 @@ const ProjectHealthSection = ({ projectId }) => {
 
   const metrics = health?.metrics;
   const hasTasks = Boolean(metrics?.totalTasks);
+  const insightIsStale = Boolean(insight && health?.asOf && healthAsOf !== health.asOf);
+  const handleGenerateInsight = async () => {
+    const result = await generateInsight();
+    if (result?.health) setHealthSnapshot(result.health);
+  };
 
   return (
     <Card
@@ -172,6 +181,51 @@ const ProjectHealthSection = ({ projectId }) => {
           <p className="project-health__as-of">
             Evaluated <time dateTime={health.asOf}>{new Date(health.asOf).toLocaleString()}</time>
           </p>
+
+          <section className="project-health__insight" aria-labelledby="health-insight-heading">
+            <div className="project-health__section-title">
+              <div>
+                <h3 id="health-insight-heading">AI insight</h3>
+                <p>Generate an explanation and suggested next steps from the health facts above.</p>
+              </div>
+              <Button disabled={generating} onClick={handleGenerateInsight}>
+                {generating ? 'Generating...' : insight ? 'Generate again' : 'Generate AI insight'}
+              </Button>
+            </div>
+            {generating && <LoadingState message="Generating AI health insight..." />}
+            {insightError && (
+              <Alert>
+                <span>{insightError}</span>{' '}
+                <button type="button" className="alert-link-button" disabled={generating} onClick={handleGenerateInsight}>
+                  Try again
+                </button>
+              </Alert>
+            )}
+            {insight && (
+              <div className="project-health__insight-result">
+                {insightIsStale && (
+                  <Alert variant="info">Health data has changed since this insight was generated. Generate again for an updated view.</Alert>
+                )}
+                <div><h4>Summary</h4><p>{insight.summary}</p></div>
+                <div>
+                  <h4>Key concerns</h4>
+                  {insight.keyConcerns.length
+                    ? <ul>{insight.keyConcerns.map((concern, index) => <li key={index}>{concern}</li>)}</ul>
+                    : <p>No additional concerns were identified.</p>}
+                </div>
+                <div>
+                  <h4>Suggested actions</h4>
+                  {insight.suggestedActions.length
+                    ? <ul>{insight.suggestedActions.map((action, index) => <li key={index}>{action}</li>)}</ul>
+                    : <p>No additional actions were suggested.</p>}
+                </div>
+                <p className="project-health__insight-note">Review AI suggestions before acting; they are not guarantees.</p>
+                {generatedAt && (
+                  <p className="project-health__as-of">Generated <time dateTime={generatedAt}>{new Date(generatedAt).toLocaleString()}</time></p>
+                )}
+              </div>
+            )}
+          </section>
         </div>
       )}
     </Card>

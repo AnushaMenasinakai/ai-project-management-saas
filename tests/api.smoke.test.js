@@ -10,6 +10,8 @@ const mockMongoose = require('mongoose');
 const request = require('supertest');
 const mockGenerateProjectTasks = jest.fn();
 const mockGenerateRagAnswer = jest.fn();
+const mockGenerateProjectHealthInsight = jest.fn();
+const mockAiLimiter = jest.fn((req, res, next) => next());
 
 const mockDatabase = {
   users: [],
@@ -27,6 +29,9 @@ jest.mock('../src/services/aiTaskService', () => ({
 }));
 jest.mock('../src/services/ragService', () => ({
   generateRagAnswer: mockGenerateRagAnswer,
+}));
+jest.mock('../src/services/projectHealthInsightService', () => ({
+  generateProjectHealthInsight: mockGenerateProjectHealthInsight,
 }));
 
 const mockIdsEqual = (left, right) =>
@@ -467,7 +472,7 @@ jest.mock('../src/services/embeddingService', () => ({
 
 jest.mock('../src/middleware/rateLimiters', () => ({
   authLimiter: (req, res, next) => next(),
-  aiLimiter: (req, res, next) => next(),
+  aiLimiter: mockAiLimiter,
 }));
 
 jest.spyOn(mockMongoose, 'startSession').mockResolvedValue({
@@ -1204,12 +1209,71 @@ describe('project health API', () => {
     })).toBe(before);
     expect(mockGenerateProjectTasks).not.toHaveBeenCalled();
     expect(mockGenerateRagAnswer).not.toHaveBeenCalled();
+    expect(mockGenerateProjectHealthInsight).not.toHaveBeenCalled();
 
     await request(app).get(`/api/projects/${project._id}/health`)
       .set('Authorization', `Bearer ${outsider.token}`).expect(404);
     await request(app).get('/api/projects/not-an-id/health')
       .set('Authorization', `Bearer ${owner.token}`).expect(404);
     await request(app).get(`/api/projects/${project._id}/health`).expect(401);
+  });
+
+  test('generates trusted owner/member insight through the AI limiter without mutations', async () => {
+    mockGenerateProjectHealthInsight.mockClear();
+    mockAiLimiter.mockClear();
+    mockGenerateProjectHealthInsight.mockResolvedValue({
+      summary: 'One task needs attention.',
+      keyConcerns: ['High-priority work is unassigned.'],
+      suggestedActions: ['Assign the task.'],
+    });
+    const { member, outsider, owner, project } = await createCollaborationFixture();
+    const task = await createProjectTask(owner.token, project._id, 'Trusted task');
+    const storedTask = mockDatabase.tasks.find((item) => mockIdsEqual(item._id, task._id));
+    storedTask.priority = 'high';
+    storedTask.description = 'Private description';
+    const before = JSON.stringify(mockDatabase);
+
+    const ownerResponse = await request(app).post(`/api/projects/${project._id}/health/insight`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ health: { status: 'healthy', metrics: { totalTasks: 999 } }, score: 100 })
+      .expect(200);
+    expect(ownerResponse.body).toEqual({
+      health: expect.objectContaining({
+        status: 'at_risk',
+        metrics: expect.objectContaining({ totalTasks: 1, highPriorityIncompleteTasks: 1 }),
+      }),
+      insight: {
+        summary: 'One task needs attention.',
+        keyConcerns: ['High-priority work is unassigned.'],
+        suggestedActions: ['Assign the task.'],
+      },
+      generatedAt: expect.any(String),
+    });
+    expect(JSON.parse(JSON.stringify(mockGenerateProjectHealthInsight.mock.calls.at(-1)[0])))
+      .toEqual(ownerResponse.body.health);
+    expect(JSON.stringify(mockGenerateProjectHealthInsight.mock.calls.at(-1)[0])).not.toContain('Private description');
+    expect(mockAiLimiter).toHaveBeenCalled();
+
+    await request(app).post(`/api/projects/${project._id}/health/insight`)
+      .set('Authorization', `Bearer ${member.token}`).send({}).expect(200);
+    await request(app).post(`/api/projects/${project._id}/health/insight`)
+      .set('Authorization', `Bearer ${outsider.token}`).send({}).expect(404);
+    await request(app).post('/api/projects/not-an-id/health/insight')
+      .set('Authorization', `Bearer ${owner.token}`).send({}).expect(404);
+    await request(app).post(`/api/projects/${project._id}/health/insight`).send({}).expect(401);
+    expect(JSON.stringify(mockDatabase)).toBe(before);
+  });
+
+  test('returns a controlled response when insight generation fails', async () => {
+    mockGenerateProjectHealthInsight.mockRejectedValueOnce(new Error('provider secret'));
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const owner = await registerAndLogin();
+    const project = await createOwnedProject(owner.token);
+    const response = await request(app).post(`/api/projects/${project._id}/health/insight`)
+      .set('Authorization', `Bearer ${owner.token}`).send({}).expect(500);
+    expect(response.body).toEqual({ message: 'Failed to generate project health insight.' });
+    expect(JSON.stringify(response.body)).not.toContain('provider secret');
+    consoleError.mockRestore();
   });
 });
 
