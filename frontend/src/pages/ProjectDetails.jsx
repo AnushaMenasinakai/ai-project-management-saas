@@ -9,6 +9,7 @@ import ActivitySection from '../components/project-details/ActivitySection';
 import DocumentsSection from '../components/project-details/DocumentsSection';
 import MembersSection from '../components/project-details/MembersSection';
 import ProjectHeader from '../components/project-details/ProjectHeader';
+import ProjectHealthSection from '../components/project-details/ProjectHealthSection';
 import ProjectQASection from '../components/project-details/ProjectQASection';
 import TasksSection from '../components/project-details/TasksSection';
 import { useAuth } from '../context/AuthContext';
@@ -272,6 +273,7 @@ return (
       onEdit={startProjectEditing}
       onDelete={deleteProject}
     />
+    <ProjectHealthSection projectId={id} />
     <MembersSection
       members={members}
       isProjectOwner={isProjectOwner}

@@ -10,11 +10,12 @@ const AppShell = () => {
   const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeProjectSection, setActiveProjectSection] = useState('project-members');
+  const [activeProjectSection, setActiveProjectSection] = useState('project-health');
   const userInitial = user?.name?.trim()?.charAt(0)?.toUpperCase() || 'U';
   const onProjectDetailsPage = /^\/projects\/[^/]+$/.test(location.pathname);
 
   const projectSections = [
+    ['project-health', 'Health'],
     ['project-members', 'Members'],
     ['project-tasks', 'Tasks'],
     ['project-documents', 'Documents'],
