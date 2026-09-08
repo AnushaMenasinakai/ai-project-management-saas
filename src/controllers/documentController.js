@@ -1,9 +1,13 @@
 const mongoose = require('mongoose');
 const Document = require('../models/Document');
 const DocumentChunk = require('../models/DocumentChunk');
-const { prepareDocumentChunks } = require('../services/documentChunkService');
+const {
+  DocumentEmbeddingLimitError,
+  prepareDocumentChunks,
+} = require('../services/documentChunkService');
 const { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } = require('../constants/activityConstants');
 const { recordActivity, resolveActorSnapshot } = require('../services/activityService');
+const sendGeminiErrorResponse = require('../utils/geminiErrorResponse');
 const {
   findProjectForCollaborator,
   findProjectForOwner,
@@ -80,6 +84,12 @@ exports.createDocument = async (req, res) => {
       document,
     });
   } catch (error) {
+    if (error instanceof DocumentEmbeddingLimitError) {
+      return res.status(error.httpStatus).json({ code: error.code, message: error.message });
+    }
+    if (sendGeminiErrorResponse({ error, feature: 'document_embedding', res })) {
+      return undefined;
+    }
     console.error('Create document error:', error);
 
     return res.status(500).json({
@@ -275,6 +285,12 @@ exports.updateDocument = async (req, res) => {
       document: updatedDocument,
     });
   } catch (error) {
+    if (error instanceof DocumentEmbeddingLimitError) {
+      return res.status(error.httpStatus).json({ code: error.code, message: error.message });
+    }
+    if (sendGeminiErrorResponse({ error, feature: 'document_embedding', res })) {
+      return undefined;
+    }
     console.error('Update document error:', error);
 
     return res.status(500).json({

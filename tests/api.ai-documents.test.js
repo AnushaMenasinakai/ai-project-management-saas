@@ -274,6 +274,34 @@ const generatedTasks = () => ({
   ],
 });
 
+const retryableProviderError = (status = 503) => {
+  const error = new Error(JSON.stringify({
+    error: {
+      code: status,
+      details: [{
+        '@type': 'type.googleapis.com/google.rpc.RetryInfo',
+        retryDelay: '0s',
+      }],
+    },
+  }));
+  error.status = status;
+  return error;
+};
+
+const quotaProviderError = () => {
+  const error = new Error(JSON.stringify({
+    error: {
+      code: 429,
+      details: [{
+        '@type': 'type.googleapis.com/google.rpc.QuotaFailure',
+        violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel' }],
+      }],
+    },
+  }));
+  error.status = 429;
+  return error;
+};
+
 beforeEach(() => {
   Object.values(mockDatabase).forEach((collection) => collection.splice(0));
   jest.clearAllMocks();
@@ -334,6 +362,75 @@ describe('document lifecycle regressions', () => {
     expect(mockDatabase.chunks).toHaveLength(0);
     expect(mockSession.endSession).toHaveBeenCalled();
     consoleError.mockRestore();
+  });
+
+  test('retries one temporary embedding failure without duplicating persistence', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { owner, project } = await createFixture();
+    mockEmbedContent
+      .mockRejectedValueOnce(retryableProviderError())
+      .mockResolvedValueOnce({ embeddings: [{ values: [1, 0, 0] }] });
+
+    await createDocument(owner.token, project._id).expect(201);
+
+    expect(mockEmbedContent).toHaveBeenCalledTimes(2);
+    expect(mockDatabase.documents).toHaveLength(1);
+    expect(mockDatabase.chunks).toHaveLength(1);
+    warning.mockRestore();
+  });
+
+  test.each([
+    {},
+    { embeddings: [] },
+    { embeddings: [{}] },
+    { embeddings: [{ values: [] }] },
+    { embeddings: [{ values: 'invalid' }] },
+    { embeddings: [{ values: [1, Number.NaN] }] },
+  ])('rejects malformed embedding response %# before persistence', async (providerResponse) => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { owner, project } = await createFixture();
+    mockEmbedContent.mockResolvedValueOnce(providerResponse);
+
+    const response = await createDocument(owner.token, project._id).expect(502);
+    expect(response.body).toEqual({
+      code: 'AI_INVALID_RESPONSE',
+      message: 'The AI service returned an invalid response. Please try again later.',
+    });
+    expect(mockDatabase.documents).toHaveLength(0);
+    expect(mockDatabase.chunks).toHaveLength(0);
+    warning.mockRestore();
+  });
+
+  test('rejects excessive document embedding work before calling Gemini', async () => {
+    const { owner, project } = await createFixture();
+    const response = await createDocument(owner.token, project._id, {
+      content: 'x'.repeat(25_000),
+    }).expect(413);
+
+    expect(response.body).toEqual({
+      code: 'DOCUMENT_EMBEDDING_LIMIT_EXCEEDED',
+      message: 'Document content exceeds the 25-chunk embedding limit.',
+    });
+    expect(mockEmbedContent).not.toHaveBeenCalled();
+    expect(mockDatabase.documents).toHaveLength(0);
+  });
+
+  test('rejects excessive update work without replacing existing chunks', async () => {
+    const { owner, project } = await createFixture();
+    const created = await createDocument(owner.token, project._id).expect(201);
+    const originalContent = mockDatabase.documents[0].content;
+    const originalChunks = [...mockDatabase.chunks];
+    mockEmbedContent.mockClear();
+
+    await request(app)
+      .patch(`/api/documents/${created.body.document._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ content: 'x'.repeat(25_000) })
+      .expect(413);
+
+    expect(mockEmbedContent).not.toHaveBeenCalled();
+    expect(mockDatabase.documents[0].content).toBe(originalContent);
+    expect(mockDatabase.chunks).toEqual(originalChunks);
   });
 });
 
@@ -397,6 +494,57 @@ describe('project RAG regressions', () => {
     expect(mockEmbedContent).not.toHaveBeenCalled();
     expect(mockGenerateContent).not.toHaveBeenCalled();
   });
+
+  test('retries only the RAG provider call and remains read-only', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { owner, project } = await createFixture();
+    await createDocument(owner.token, project._id).expect(201);
+    const countsBefore = {
+      documents: mockDatabase.documents.length,
+      chunks: mockDatabase.chunks.length,
+      tasks: mockDatabase.tasks.length,
+      activities: mockDatabase.activities.length,
+    };
+    mockGenerateContent
+      .mockRejectedValueOnce(retryableProviderError())
+      .mockResolvedValueOnce({ text: 'The API uses Express.' });
+
+    await request(app)
+      .post(`/api/projects/${project._id}/ask`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ question: 'Which framework is used?' })
+      .expect(200);
+
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2);
+    expect({
+      documents: mockDatabase.documents.length,
+      chunks: mockDatabase.chunks.length,
+      tasks: mockDatabase.tasks.length,
+      activities: mockDatabase.activities.length,
+    }).toEqual(countsBefore);
+    warning.mockRestore();
+  });
+
+  test('returns a safe RAG error after retry exhaustion', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { owner, project } = await createFixture();
+    await createDocument(owner.token, project._id).expect(201);
+    mockGenerateContent.mockRejectedValue(retryableProviderError());
+
+    const response = await request(app)
+      .post(`/api/projects/${project._id}/ask`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ question: 'Which framework is used?' })
+      .expect(503);
+
+    expect(response.body).toEqual({
+      code: 'AI_TEMPORARILY_UNAVAILABLE',
+      message: 'The AI service is temporarily unavailable. Please try again.',
+      retryAfterSeconds: 0,
+    });
+    expect(JSON.stringify(response.body)).not.toContain('RetryInfo');
+    warning.mockRestore();
+  });
 });
 
 describe('AI task generation regressions', () => {
@@ -434,6 +582,83 @@ describe('AI task generation regressions', () => {
     expect(mockGenerateContent).not.toHaveBeenCalled();
   });
 
+  test('retries a temporary provider failure without duplicating generated tasks', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { owner, project } = await createFixture();
+    mockGenerateContent
+      .mockRejectedValueOnce(retryableProviderError())
+      .mockResolvedValueOnce({ text: JSON.stringify(generatedTasks()) });
+
+    await request(app)
+      .post(`/api/projects/${project._id}/ai/generate-tasks`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(201);
+
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2);
+    expect(mockDatabase.tasks).toHaveLength(5);
+    expect(mockDatabase.activities.filter((item) => item.type === 'ai_tasks_generated')).toHaveLength(1);
+    warning.mockRestore();
+  });
+
+  test('returns a safe error after provider retry exhaustion without persistence', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { owner, project } = await createFixture();
+    mockGenerateContent.mockRejectedValue(retryableProviderError());
+
+    const response = await request(app)
+      .post(`/api/projects/${project._id}/ai/generate-tasks`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(503);
+
+    expect(response.body).toEqual({
+      code: 'AI_TEMPORARILY_UNAVAILABLE',
+      message: 'The AI service is temporarily unavailable. Please try again.',
+      retryAfterSeconds: 0,
+    });
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2);
+    expect(mockDatabase.tasks).toHaveLength(0);
+    warning.mockRestore();
+  });
+
+  test('does not retry confirmed quota exhaustion or expose provider details', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { owner, project } = await createFixture();
+    mockGenerateContent.mockRejectedValueOnce(quotaProviderError());
+
+    const response = await request(app)
+      .post(`/api/projects/${project._id}/ai/generate-tasks`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(429);
+
+    expect(response.body).toEqual({
+      code: 'AI_QUOTA_EXHAUSTED',
+      message: 'AI usage is temporarily unavailable because the service quota has been reached. Please try again later.',
+    });
+    expect(JSON.stringify(response.body)).not.toMatch(/QuotaFailure|PerDay|RESOURCE_EXHAUSTED/);
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+    expect(mockDatabase.tasks).toHaveLength(0);
+    warning.mockRestore();
+  });
+
+  test.each([400, 401])('does not retry provider configuration error %s', async (status) => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { owner, project } = await createFixture();
+    const error = Object.assign(new Error('provider secret'), { status });
+    mockGenerateContent.mockRejectedValueOnce(error);
+
+    const response = await request(app)
+      .post(`/api/projects/${project._id}/ai/generate-tasks`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .expect(503);
+    expect(response.body).toEqual({
+      code: 'AI_CONFIGURATION_ERROR',
+      message: 'The AI service is not configured correctly.',
+    });
+    expect(JSON.stringify(response.body)).not.toContain('provider secret');
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+    warning.mockRestore();
+  });
+
   test('rejects cyclic generated dependencies before persistence', async () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     const { owner, project } = await createFixture();
@@ -444,7 +669,10 @@ describe('AI task generation regressions', () => {
     await request(app)
       .post(`/api/projects/${project._id}/ai/generate-tasks`)
       .set('Authorization', `Bearer ${owner.token}`)
-      .expect(500, { message: 'Failed to generate AI tasks.' });
+      .expect(502, {
+        code: 'AI_INVALID_RESPONSE',
+        message: 'The AI service returned an invalid response. Please try again later.',
+      });
 
     expect(Task.insertMany).not.toHaveBeenCalled();
     expect(mockDatabase.tasks).toHaveLength(0);
@@ -459,7 +687,10 @@ describe('AI task generation regressions', () => {
     await request(app)
       .post(`/api/projects/${project._id}/ai/generate-tasks`)
       .set('Authorization', `Bearer ${owner.token}`)
-      .expect(500, { message: 'Failed to generate AI tasks.' });
+      .expect(502, {
+        code: 'AI_INVALID_RESPONSE',
+        message: 'The AI service returned an invalid response. Please try again later.',
+      });
 
     expect(Task.insertMany).not.toHaveBeenCalled();
     expect(mockDatabase.tasks).toHaveLength(0);

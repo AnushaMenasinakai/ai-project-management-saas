@@ -68,6 +68,11 @@ const safeErrorDefinitions = Object.freeze({
   },
 });
 
+const createInvalidResponseError = () => new GeminiReliabilityError({
+  code: ERROR_CODES.INVALID_RESPONSE,
+  ...safeErrorDefinitions[ERROR_CODES.INVALID_RESPONSE],
+});
+
 const getStatus = (error) => {
   const candidates = [error?.status, error?.statusCode, error?.error?.code];
   const status = candidates.find((value) => Number.isInteger(Number(value)));
@@ -291,6 +296,7 @@ module.exports = {
   GeminiReliabilityError,
   classifyGeminiError,
   createGeminiClient,
+  createInvalidResponseError,
   executeGeminiRequest,
   extractRetryDelayMs,
   hasConfirmedQuotaExhaustion,

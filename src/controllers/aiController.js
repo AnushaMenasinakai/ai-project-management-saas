@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { generateRagAnswer } = require('../services/ragService');
 const { findProjectForCollaborator } = require('../services/projectAccessService');
+const sendGeminiErrorResponse = require('../utils/geminiErrorResponse');
 
 // Ask a question about a project
 exports.askProject = async (req, res) => {
@@ -36,6 +37,9 @@ exports.askProject = async (req, res) => {
       sources: result.sources,
     });
   } catch (error) {
+    if (sendGeminiErrorResponse({ error, feature: 'rag_answer_generation', res })) {
+      return undefined;
+    }
     console.error('Ask project error:', error);
 
     return res.status(500).json({

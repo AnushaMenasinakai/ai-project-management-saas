@@ -4,6 +4,7 @@ const { generateProjectTasks } = require('../services/aiTaskService');
 const { findProjectForCollaborator } = require('../services/projectAccessService');
 const { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } = require('../constants/activityConstants');
 const { recordActivity, resolveActorSnapshot } = require('../services/activityService');
+const sendGeminiErrorResponse = require('../utils/geminiErrorResponse');
 
 exports.generateTasks = async (req, res) => {
   try {
@@ -94,6 +95,9 @@ exports.generateTasks = async (req, res) => {
       tasks: finalTasks,
     });
   } catch (error) {
+    if (sendGeminiErrorResponse({ error, feature: 'ai_task_generation', res })) {
+      return undefined;
+    }
     console.error('Generate AI tasks error:', error);
     return res.status(500).json({
       message: 'Failed to generate AI tasks.',

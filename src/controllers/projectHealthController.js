@@ -3,6 +3,7 @@ const Task = require('../models/Task');
 const { findProjectForCollaborator } = require('../services/projectAccessService');
 const { calculateProjectHealth } = require('../services/projectHealthService');
 const { generateProjectHealthInsight } = require('../services/projectHealthInsightService');
+const sendGeminiErrorResponse = require('../utils/geminiErrorResponse');
 
 const findHealthSnapshot = async (projectId, userId) => {
   if (!mongoose.isValidObjectId(projectId)) return null;
@@ -34,6 +35,9 @@ const generateHealthInsight = async (req, res) => {
     const insight = await generateProjectHealthInsight(health);
     return res.status(200).json({ health, insight, generatedAt: new Date().toISOString() });
   } catch (error) {
+    if (sendGeminiErrorResponse({ error, feature: 'project_health_insight', res })) {
+      return undefined;
+    }
     console.error('Generate project health insight error:', error);
     return res.status(500).json({ message: 'Failed to generate project health insight.' });
   }

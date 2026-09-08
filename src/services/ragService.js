@@ -1,11 +1,13 @@
-const { GoogleGenAI } = require('@google/genai');
 const { searchSimilarChunks } = require('./vectorSearchService');
 const Document = require('../models/Document');
 const config = require('../config/env');
+const {
+  createGeminiClient,
+  createInvalidResponseError,
+  executeGeminiRequest,
+} = require('./geminiReliabilityService');
 
-const ai = new GoogleGenAI({
-  apiKey: config.geminiApiKey,
-});
+const ai = createGeminiClient({ apiKey: config.geminiApiKey });
 
 const generateRagAnswer = async (question, projectId) => {
   if (!question || !question.trim()) {
@@ -45,13 +47,22 @@ ${question}
 Provide a clear and concise answer.
 `;
 
-  const response = await ai.models.generateContent({
+  const response = await executeGeminiRequest({
+    feature: 'rag_answer_generation',
     model: config.geminiModel,
-    contents: prompt,
+    operation: ({ signal }) => ai.models.generateContent({
+      model: config.geminiModel,
+      contents: prompt,
+      config: { abortSignal: signal },
+    }),
   });
 
+  if (typeof response?.text !== 'string' || !response.text.trim()) {
+    throw createInvalidResponseError();
+  }
+
   return {
-    answer: response.text,
+    answer: response.text.trim(),
     sources: await Promise.all(
   results.map(async (result) => {
     const document = await Document.findById(result.chunk.document);

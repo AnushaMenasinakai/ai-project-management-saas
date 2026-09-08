@@ -26,6 +26,7 @@ const {
   validateTaskDependencies,
 } = require('../src/services/taskValidationService');
 const { prepareDocumentChunks } = require('../src/services/documentChunkService');
+const { MAX_DOCUMENT_EMBEDDING_CHUNKS } = require('../src/services/documentChunkService');
 
 describe('backend refactor service boundaries', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -104,5 +105,18 @@ describe('backend refactor service boundaries', () => {
       { content: 'first', chunkIndex: 0, embedding: [1, 0] },
       { content: 'second', chunkIndex: 1, embedding: [0, 1] },
     ]);
+  });
+
+  test('rejects excessive embedding work before the first provider call', async () => {
+    chunkText.mockReturnValue(Array.from(
+      { length: MAX_DOCUMENT_EMBEDDING_CHUNKS + 1 },
+      (_, index) => `chunk ${index}`
+    ));
+
+    await expect(prepareDocumentChunks('oversized document')).rejects.toMatchObject({
+      code: 'DOCUMENT_EMBEDDING_LIMIT_EXCEEDED',
+      httpStatus: 413,
+    });
+    expect(generateEmbedding).not.toHaveBeenCalled();
   });
 });

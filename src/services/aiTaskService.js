@@ -1,9 +1,11 @@
-const { GoogleGenAI } = require('@google/genai');
 const config = require('../config/env');
+const {
+  createGeminiClient,
+  createInvalidResponseError,
+  executeGeminiRequest,
+} = require('./geminiReliabilityService');
 
-const ai = new GoogleGenAI({
-  apiKey: config.geminiApiKey,
-});
+const ai = createGeminiClient({ apiKey: config.geminiApiKey });
 
 const allowedPriorities = ['low', 'medium', 'high'];
 
@@ -159,12 +161,17 @@ Return JSON only, with no markdown or explanation, in exactly this shape:
 }
 `;
 
-  const response = await ai.models.generateContent({
+  const response = await executeGeminiRequest({
+    feature: 'ai_task_generation',
     model: config.geminiModel,
-    contents: prompt,
-    config: {
-      responseMimeType: 'application/json',
-    },
+    operation: ({ signal }) => ai.models.generateContent({
+      model: config.geminiModel,
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        abortSignal: signal,
+      },
+    }),
   });
 
   let result;
@@ -172,10 +179,14 @@ Return JSON only, with no markdown or explanation, in exactly this shape:
   try {
     result = JSON.parse(response.text);
   } catch (error) {
-    throw new Error('AI returned invalid JSON.');
+    throw createInvalidResponseError();
   }
 
-  return validateGeneratedTasks(result);
+  try {
+    return validateGeneratedTasks(result);
+  } catch (error) {
+    throw createInvalidResponseError();
+  }
 };
 
 module.exports = {

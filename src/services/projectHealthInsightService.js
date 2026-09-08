@@ -1,7 +1,11 @@
-const { GoogleGenAI } = require('@google/genai');
 const config = require('../config/env');
+const {
+  createGeminiClient,
+  createInvalidResponseError,
+  executeGeminiRequest,
+} = require('./geminiReliabilityService');
 
-const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
+const ai = createGeminiClient({ apiKey: config.geminiApiKey });
 const MAX_ATTENTION_TASKS = 25;
 const MAX_BLOCKING_DEPENDENCIES = 10;
 const MAX_TITLE_LENGTH = 200;
@@ -89,19 +93,27 @@ Return JSON only with exactly these fields:
 Trusted deterministic health data:
 ${JSON.stringify(trustedInput)}
 `;
-  const response = await ai.models.generateContent({
+  const response = await executeGeminiRequest({
+    feature: 'project_health_insight',
     model: config.geminiModel,
-    contents: prompt,
-    config: { responseMimeType: 'application/json' },
+    operation: ({ signal }) => ai.models.generateContent({
+      model: config.geminiModel,
+      contents: prompt,
+      config: { responseMimeType: 'application/json', abortSignal: signal },
+    }),
   });
 
   let parsed;
   try {
     parsed = JSON.parse(response.text);
   } catch (error) {
-    throw new Error('AI health insight returned invalid JSON.');
+    throw createInvalidResponseError();
   }
-  return validateHealthInsight(parsed);
+  try {
+    return validateHealthInsight(parsed);
+  } catch (error) {
+    throw createInvalidResponseError();
+  }
 };
 
 module.exports = {
