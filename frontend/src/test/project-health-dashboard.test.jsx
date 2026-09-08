@@ -223,13 +223,17 @@ describe('Project health dashboard', () => {
 
   test('preserves health on AI failure and supports retry', async () => {
     api.post
-      .mockRejectedValueOnce({ response: { data: { message: 'Insight unavailable.' } } })
+      .mockRejectedValueOnce({ response: { data: {
+        code: 'AI_QUOTA_EXHAUSTED', message: 'provider quota detail',
+      } } })
       .mockResolvedValueOnce({ data: insightResponse });
     renderSection();
     fireEvent.click(screen.getByRole('button', { name: 'Load health' }));
     await screen.findByText('At Risk');
     fireEvent.click(screen.getByRole('button', { name: 'Generate AI insight' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Insight unavailable.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'AI usage is temporarily unavailable because the service quota has been reached. Please try again later.',
+    );
     expect(screen.getByText('Ship a very long dashboard name')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('Focus on the blocked dashboard task.')).toBeInTheDocument();
@@ -250,6 +254,25 @@ describe('Project health dashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     expect(await screen.findByText(/health data has changed since this insight was generated/i)).toBeInTheDocument();
     expect(screen.getByText('Focus on the blocked dashboard task.')).toBeInTheDocument();
+  });
+
+  test('preserves a previous valid insight when regeneration fails', async () => {
+    api.post
+      .mockResolvedValueOnce({ data: insightResponse })
+      .mockRejectedValueOnce({ response: { data: {
+        code: 'AI_TEMPORARILY_UNAVAILABLE', message: 'provider detail',
+      } } });
+    renderSection();
+    fireEvent.click(screen.getByRole('button', { name: 'Load health' }));
+    await screen.findByText('At Risk');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate AI insight' }));
+    await screen.findByText('Focus on the blocked dashboard task.');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate again' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The AI service is temporarily unavailable. Please try again.',
+    );
+    expect(screen.getByText('Focus on the blocked dashboard task.')).toBeInTheDocument();
+    expect(screen.getByText('Ship a very long dashboard name')).toBeInTheDocument();
   });
 
   test('does not let a pending insight replace a newer refreshed health snapshot', async () => {

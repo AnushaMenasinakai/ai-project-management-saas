@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import ProjectDetails from '../pages/ProjectDetails';
@@ -68,5 +68,22 @@ describe('Project Details permission visibility', () => {
     expect(screen.queryByRole('button', { name: 'Create Document' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+  });
+
+  test('preserves tasks and prevents duplicate AI generation after a provider failure', async () => {
+    api.post.mockRejectedValue({ response: { data: {
+      code: 'AI_TEMPORARILY_UNAVAILABLE', message: 'provider detail',
+    } } });
+    renderProject('owner-1');
+    expect(await screen.findByText('Critical task')).toBeInTheDocument();
+    const generate = screen.getByRole('button', { name: 'Generate Tasks with AI' });
+    fireEvent.click(generate);
+    fireEvent.click(generate);
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The AI service is temporarily unavailable. Please try again.',
+    );
+    expect(screen.getByText('Critical task')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Generate Tasks with AI' })).toBeEnabled();
   });
 });

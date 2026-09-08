@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '../services/api';
+import { formatAiError } from '../utils/aiErrorUtils';
 
 const useProjectDocuments = (projectId) => {
   const [resource, setResource] = useState({ projectId: null, documents: [], error: '' });
@@ -90,8 +91,7 @@ const useProjectDocuments = (projectId) => {
       setDocumentContent('');
       await refreshDocuments();
     } catch (error) {
-      console.error('Create document error:', error);
-      setCreateDocumentError(error.response?.data?.message || 'Failed to create document.');
+      setCreateDocumentError(formatAiError(error, 'Failed to create document.'));
     } finally {
       setCreatingDocument(false);
     }
@@ -122,8 +122,7 @@ const useProjectDocuments = (projectId) => {
       resetDocumentEdit();
       await refreshDocuments();
     } catch (error) {
-      console.error('Update document error:', error);
-      setEditDocumentError(error.response?.data?.message || 'Failed to update document.');
+      setEditDocumentError(formatAiError(error, 'Failed to update document.'));
     } finally {
       setSavingDocument(false);
     }

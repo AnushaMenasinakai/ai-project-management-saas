@@ -5,6 +5,7 @@ import Card from '../Card';
 const ProjectQASection = ({
   question,
   answer,
+  answerQuestion,
   sources,
   loading,
   error,
@@ -38,6 +39,12 @@ const ProjectQASection = ({
     {answer && (
       <div className="project-qa-answer" aria-live="polite">
         <p className="section-eyebrow">AI answer</p>
+        {answerQuestion && <p className="project-qa-answer__question">Answer to “{answerQuestion}”</p>}
+        {(loading || error) && question.trim() !== answerQuestion && (
+          <p className="project-qa-answer__context">
+            The answer below is from the previous successful question.
+          </p>
+        )}
         <p>{answer}</p>
       </div>
     )}

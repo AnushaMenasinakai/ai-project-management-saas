@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../services/api';
+import { formatAiError } from '../utils/aiErrorUtils';
 
 const emptyResource = (projectId) => ({
   projectId, insight: null, generatedAt: null, healthAsOf: null, generating: false, error: '',
@@ -42,7 +43,7 @@ const useProjectHealthInsight = (projectId) => {
           ...current,
           projectId,
           generating: false,
-          error: error.response?.data?.message || 'Failed to generate AI health insight.',
+          error: formatAiError(error, 'Failed to generate AI health insight.'),
         }));
       }
       return false;

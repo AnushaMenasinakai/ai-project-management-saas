@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Alert from '../components/Alert';
 import Button from '../components/Button';
@@ -25,6 +25,7 @@ import useProjectMembers from '../hooks/useProjectMembers';
 import useProjectQA from '../hooks/useProjectQA';
 import useProjectTasks from '../hooks/useProjectTasks';
 import api from '../services/api';
+import { formatAiError } from '../utils/aiErrorUtils';
 
 const ProjectDetails = () => {
   const { id } = useParams();
@@ -129,6 +130,7 @@ const ProjectDetails = () => {
     question: ragQuestion,
     setQuestion: setRagQuestion,
     answer: ragAnswer,
+    answerQuestion: ragAnswerQuestion,
     sources: ragSources,
     loading: ragLoading,
     error: ragError,
@@ -138,13 +140,15 @@ const ProjectDetails = () => {
   const [generatingTasks, setGeneratingTasks] = useState(false);
   const [generateTasksError, setGenerateTasksError] = useState('');
   const [generateTasksSuccess, setGenerateTasksSuccess] = useState('');
+  const generatingTasksRef = useRef(false);
 
 const handleGenerateTasks = async () => {
-  if (generatingTasks) {
+  if (generatingTasksRef.current) {
     return;
   }
 
   try {
+    generatingTasksRef.current = true;
     setGeneratingTasks(true);
     setGenerateTasksError('');
     setGenerateTasksSuccess('');
@@ -162,13 +166,10 @@ const handleGenerateTasks = async () => {
         : 'AI tasks generated successfully.'
     );
   } catch (err) {
-    console.error('Generate AI tasks error:', err);
-
     setGenerateTasksSuccess('');
-    setGenerateTasksError(
-      err.response?.data?.message || 'Failed to generate AI tasks.'
-    );
+    setGenerateTasksError(formatAiError(err, 'Failed to generate AI tasks.'));
   } finally {
+    generatingTasksRef.current = false;
     setGeneratingTasks(false);
   }
 };
@@ -322,6 +323,7 @@ return (
     <ProjectQASection
       question={ragQuestion}
       answer={ragAnswer}
+      answerQuestion={ragAnswerQuestion}
       sources={ragSources}
       loading={ragLoading}
       error={ragError}
