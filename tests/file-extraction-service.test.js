@@ -10,6 +10,9 @@ jest.mock('pdf-parse', () => ({
       if (content.includes('protected')) {
         throw Object.assign(new Error('password detail'), { name: 'PasswordException' });
       }
+      if (content.includes('scanned')) {
+        return { text: '\n-- 1 of 1 --\n', total: 1, pages: [{ num: 1, text: '' }] };
+      }
       return {
         text: 'Release planning notes',
         total: 1,
@@ -69,6 +72,12 @@ describe('document file extraction', () => {
     expect(result.text).toBe('Architecture decision record');
     expect(result.metadata.pageCount).toBeUndefined();
     expect(result.segments).toBeUndefined();
+  });
+
+  test('rejects an image-only PDF even when the parser adds page separators', async () => {
+    await expect(extractDocumentFile(file(
+      'scan.pdf', 'application/pdf', Buffer.from('%PDF-scanned')
+    ))).rejects.toMatchObject({ code: 'DOCUMENT_FILE_EMPTY', httpStatus: 422 });
   });
 
   test.each([

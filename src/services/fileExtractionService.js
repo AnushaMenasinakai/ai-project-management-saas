@@ -134,7 +134,8 @@ const extractPdf = async (buffer) => {
   try {
     parser = new PDFParse({ data: new Uint8Array(buffer) });
     const result = await parser.getText();
-    const pages = Array.isArray(result.pages)
+    const hasPageResults = Array.isArray(result.pages);
+    const pages = hasPageResults
       ? result.pages
         .map((page, index) => ({
           pageNumber: Number.isInteger(page?.num) && page.num > 0 ? page.num : index + 1,
@@ -143,7 +144,7 @@ const extractPdf = async (buffer) => {
         .filter((page) => page.text)
       : [];
     return {
-      text: result.text,
+      text: hasPageResults ? pages.map((page) => page.text).join('\n\n') : result.text,
       pageCount: result.total || result.pages?.length || undefined,
       ...(pages.length > 0 ? { segments: pages } : {}),
     };
