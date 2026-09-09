@@ -58,12 +58,21 @@ const ProjectQASection = ({
           {sources.map((source, index) => (
             <li key={source.chunkId || index}>
               <div className="project-qa-source__header">
-                {source.title && <strong>{source.title}</strong>}
+                <div>
+                  <span className="project-qa-source__identifier">{source.sourceId || `Source ${index + 1}`}</span>
+                  {source.title && <strong>{source.title}</strong>}
+                </div>
                 {typeof source.score === 'number' && (
                   <span className="project-qa-source-score">Relevance {(source.score * 100).toFixed(1)}%</span>
                 )}
               </div>
-              {source.content && <p className="project-qa-source-content">{source.content}</p>}
+              {(source.originalFilename || source.pageNumber || source.section) && (
+                <p className="project-qa-source__location">
+                  {[source.originalFilename, source.pageNumber ? `Page ${source.pageNumber}` : '', source.section]
+                    .filter(Boolean).join(' · ')}
+                </p>
+              )}
+              {(source.excerpt || source.content) && <p className="project-qa-source-content">{source.excerpt || source.content}</p>}
             </li>
           ))}
         </ul>

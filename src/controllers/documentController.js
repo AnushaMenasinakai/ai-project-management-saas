@@ -78,7 +78,9 @@ exports.uploadDocument = async (req, res) => {
     if (!project) return res.status(404).json({ message: 'Project not found.' });
 
     const extracted = await extractDocumentFile(req.file);
-    const preparedChunks = await prepareDocumentChunks(extracted.text);
+    const preparedChunks = await prepareDocumentChunks(extracted.text, {
+      segments: extracted.segments,
+    });
     const actor = await resolveActorSnapshot(req.user.id);
     const document = await persistPreparedDocument({
       title: title.trim(),

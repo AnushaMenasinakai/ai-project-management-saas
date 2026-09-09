@@ -25,6 +25,17 @@ const documentChunkSchema = new mongoose.Schema(
       min: 0,
     },
 
+    pageNumber: {
+      type: Number,
+      min: 1,
+    },
+
+    section: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+    },
+
     embedding: {
   type: [Number],
   required: true,

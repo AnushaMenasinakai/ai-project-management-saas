@@ -134,7 +134,19 @@ const extractPdf = async (buffer) => {
   try {
     parser = new PDFParse({ data: new Uint8Array(buffer) });
     const result = await parser.getText();
-    return { text: result.text, pageCount: result.total || result.pages?.length || undefined };
+    const pages = Array.isArray(result.pages)
+      ? result.pages
+        .map((page, index) => ({
+          pageNumber: Number.isInteger(page?.num) && page.num > 0 ? page.num : index + 1,
+          text: normalizeExtractedText(page?.text),
+        }))
+        .filter((page) => page.text)
+      : [];
+    return {
+      text: result.text,
+      pageCount: result.total || result.pages?.length || undefined,
+      ...(pages.length > 0 ? { segments: pages } : {}),
+    };
   } catch (error) {
     if (error instanceof PasswordException || error?.name === 'PasswordException') {
       throw fileError(FILE_ERROR_CODES.INVALID);
@@ -169,6 +181,7 @@ const extractDocumentFile = async (file) => {
 
   return {
     text,
+    ...(Array.isArray(extraction?.segments) ? { segments: extraction.segments } : {}),
     metadata: {
       originalFilename: sanitizeFilename(file.originalname),
       mimeType: file.mimetype.toLowerCase(),

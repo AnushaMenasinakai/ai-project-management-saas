@@ -1747,6 +1747,9 @@ select[multiple] { max-width: 100%; }
 .project-qa-answer > p:last-child { color: var(--color-text); margin: 0; }
 .project-qa-sources { border-top: 1px solid var(--color-border); padding-top: var(--space-5); }
 .project-qa-source__header strong { overflow-wrap: anywhere; }
+.project-qa-source__header > div { display: grid; gap: var(--space-1); min-width: 0; }
+.project-qa-source__identifier { color: var(--color-primary); font-size: .72rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.project-qa-source__location { color: var(--color-text-muted); font-size: .8rem; margin: var(--space-2) 0 0; overflow-wrap: anywhere; }
 .project-qa-source-score { background: var(--color-primary-soft); border-radius: 999px; color: var(--color-primary); flex: 0 0 auto; font-size: .75rem; font-weight: 700; padding: .25rem .55rem; }
 
 @media (max-width: 767px) {

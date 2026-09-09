@@ -55,6 +55,7 @@ describe('document file extraction', () => {
     const result = await extractDocumentFile(file('plan.pdf', 'application/pdf', buffer));
     expect(result.text).toContain('Release planning notes');
     expect(result.metadata).toMatchObject({ originalFilename: 'plan.pdf', pageCount: 1 });
+    expect(result.segments).toEqual([{ pageNumber: 1, text: 'Release planning notes' }]);
     expect(mockPdfDestroy).toHaveBeenCalled();
   });
 
@@ -67,6 +68,7 @@ describe('document file extraction', () => {
     ));
     expect(result.text).toBe('Architecture decision record');
     expect(result.metadata.pageCount).toBeUndefined();
+    expect(result.segments).toBeUndefined();
   });
 
   test.each([
