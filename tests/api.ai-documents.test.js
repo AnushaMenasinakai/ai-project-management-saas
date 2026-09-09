@@ -264,6 +264,20 @@ const createDocument = (token, projectId, overrides = {}) =>
       ...overrides,
     });
 
+const uploadTxtDocument = (token, projectId, overrides = {}) => {
+  const requestBuilder = request(app)
+    .post('/api/documents/upload');
+  if (token) requestBuilder.set('Authorization', `Bearer ${token}`);
+  return requestBuilder
+    .field('projectId', projectId.toString())
+    .field('title', overrides.title || 'Uploaded Notes')
+    .attach(
+      'file',
+      overrides.buffer || Buffer.from('Uploaded project knowledge for retrieval.'),
+      { filename: overrides.filename || 'notes.txt', contentType: overrides.contentType || 'text/plain' }
+    );
+};
+
 const generatedTasks = () => ({
   tasks: [
     { id: 'task_1', title: 'Plan', description: 'Plan work', priority: 'high', dueDate: '2026-10-01', dependsOn: [] },
@@ -306,6 +320,114 @@ beforeEach(() => {
   Object.values(mockDatabase).forEach((collection) => collection.splice(0));
   jest.clearAllMocks();
   mockEmbedContent.mockResolvedValue({ embeddings: [{ values: [1, 0, 0] }] });
+});
+
+describe('document file upload foundation', () => {
+  test('requires authentication and allows only the project owner', async () => {
+    const { owner, member, outsider, project } = await createFixture();
+    await uploadTxtDocument(null, project._id).expect(401);
+    await uploadTxtDocument(member.token, project._id).expect(404, { message: 'Project not found.' });
+    await uploadTxtDocument(outsider.token, project._id).expect(404, { message: 'Project not found.' });
+    await uploadTxtDocument(owner.token, project._id).expect(201);
+    expect(mockDatabase.documents).toHaveLength(1);
+  });
+
+  test('uploads valid TXT with safe metadata, chunks, and an Activity entry', async () => {
+    const { owner, project } = await createFixture();
+    const response = await uploadTxtDocument(owner.token, project._id, {
+      title: 'Release Notes', filename: 'release.txt', buffer: Buffer.from('Release checklist and rollback plan.'),
+    }).expect(201);
+
+    expect(response.body.document).toMatchObject({
+      title: 'Release Notes', sourceType: 'file', originalFilename: 'release.txt',
+      mimeType: 'text/plain', fileSize: 36, content: 'Release checklist and rollback plan.',
+    });
+    expect(mockDatabase.chunks).toEqual([expect.objectContaining({
+      content: 'Release checklist and rollback plan.', embedding: [1, 0, 0], chunkIndex: 0,
+    })]);
+    expect(mockDatabase.activities).toContainEqual(expect.objectContaining({
+      type: 'document_created', entityName: 'Release Notes',
+    }));
+    expect(response.body.document).not.toHaveProperty('buffer');
+  });
+
+  test('rejects missing, unsupported, corrupt, and oversized files safely', async () => {
+    const { owner, project } = await createFixture();
+    await request(app)
+      .post('/api/documents/upload')
+      .set('Authorization', `Bearer ${owner.token}`)
+      .field('projectId', project._id.toString())
+      .field('title', 'Missing')
+      .expect(400, { code: 'DOCUMENT_FILE_REQUIRED', message: 'A document file is required.' });
+
+    await uploadTxtDocument(owner.token, project._id, {
+      filename: 'payload.exe', contentType: 'application/octet-stream',
+    }).expect(415, {
+      code: 'DOCUMENT_FILE_UNSUPPORTED', message: 'Only TXT, PDF, and DOCX files are supported.',
+    });
+    await uploadTxtDocument(owner.token, project._id, {
+      filename: 'broken.pdf', contentType: 'application/pdf', buffer: Buffer.from('%PDF-broken'),
+    }).expect(422, {
+      code: 'DOCUMENT_FILE_INVALID', message: 'The uploaded file is invalid, corrupt, or protected.',
+    });
+    await uploadTxtDocument(owner.token, project._id, {
+      filename: 'large.txt', buffer: Buffer.alloc((5 * 1024 * 1024) + 1, 0x61),
+    }).expect(413, {
+      code: 'DOCUMENT_FILE_TOO_LARGE', message: 'The uploaded file exceeds the 5 MB limit.',
+    });
+    expect(mockDatabase.documents).toHaveLength(0);
+    expect(mockEmbedContent).not.toHaveBeenCalled();
+  });
+
+  test('rejects extracted-text and embedding-workload limits before Gemini', async () => {
+    const { owner, project } = await createFixture();
+    await uploadTxtDocument(owner.token, project._id, {
+      filename: 'extracted-large.txt', buffer: Buffer.from('x'.repeat(100_001)),
+    }).expect(413, {
+      code: 'DOCUMENT_EXTRACTED_TEXT_TOO_LARGE', message: 'The extracted document text is too large.',
+    });
+    await uploadTxtDocument(owner.token, project._id, {
+      filename: 'too-many-chunks.txt', buffer: Buffer.from('x'.repeat(25_000)),
+    }).expect(413, {
+      code: 'DOCUMENT_EMBEDDING_LIMIT_EXCEEDED',
+      message: 'Document content exceeds the 25-chunk embedding limit.',
+    });
+    expect(mockEmbedContent).not.toHaveBeenCalled();
+    expect(mockDatabase.documents).toHaveLength(0);
+  });
+
+  test('retries a provider call without duplicating uploaded persistence', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { owner, project } = await createFixture();
+    mockEmbedContent
+      .mockRejectedValueOnce(retryableProviderError())
+      .mockResolvedValueOnce({ embeddings: [{ values: [1, 0, 0] }] });
+    await uploadTxtDocument(owner.token, project._id).expect(201);
+    expect(mockEmbedContent).toHaveBeenCalledTimes(2);
+    expect(mockDatabase.documents).toHaveLength(1);
+    expect(mockDatabase.chunks).toHaveLength(1);
+    warning.mockRestore();
+  });
+
+  test('leaves no records after embedding or transactional persistence failure', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { owner, project } = await createFixture();
+    mockEmbedContent.mockResolvedValueOnce({ embeddings: [] });
+    await uploadTxtDocument(owner.token, project._id).expect(502);
+    expect(mockDatabase.documents).toHaveLength(0);
+    expect(mockDatabase.chunks).toHaveLength(0);
+
+    const Activity = require('../src/models/Activity');
+    Activity.create.mockRejectedValueOnce(new Error('activity write failed'));
+    mockEmbedContent.mockResolvedValueOnce({ embeddings: [{ values: [1, 0, 0] }] });
+    await uploadTxtDocument(owner.token, project._id).expect(500);
+    expect(mockDatabase.documents).toHaveLength(0);
+    expect(mockDatabase.chunks).toHaveLength(0);
+    expect(mockDatabase.activities.filter((activity) => activity.type === 'document_created')).toHaveLength(0);
+    warning.mockRestore();
+    consoleError.mockRestore();
+  });
 });
 
 describe('document lifecycle regressions', () => {

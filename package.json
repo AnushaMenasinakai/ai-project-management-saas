@@ -20,7 +20,10 @@
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^8.9.5"
+    "mammoth": "1.12.2",
+    "mongoose": "^8.9.5",
+    "multer": "2.3.0",
+    "pdf-parse": "2.4.5"
   },
   "devDependencies": {
     "jest": "^30.5.1",

@@ -8,10 +8,104 @@ const {
 const { ACTIVITY_ENTITY_TYPES, ACTIVITY_TYPES } = require('../constants/activityConstants');
 const { recordActivity, resolveActorSnapshot } = require('../services/activityService');
 const sendGeminiErrorResponse = require('../utils/geminiErrorResponse');
+const { DocumentFileError, extractDocumentFile } = require('../services/fileExtractionService');
 const {
   findProjectForCollaborator,
   findProjectForOwner,
 } = require('../services/projectAccessService');
+
+const persistPreparedDocument = async ({
+  title,
+  content,
+  project,
+  uploadedBy,
+  sourceType,
+  metadata = {},
+  preparedChunks,
+  actor,
+}) => {
+  const session = await mongoose.startSession();
+  let document;
+  try {
+    await session.withTransaction(async () => {
+      document = new Document({
+        title,
+        content,
+        project: project._id,
+        uploadedBy,
+        sourceType,
+        ...metadata,
+      });
+      await document.save({ session });
+      await DocumentChunk.insertMany(preparedChunks.map((chunk) => ({
+        document: document._id,
+        project: document.project,
+        ...chunk,
+      })), { session });
+      await recordActivity({
+        project: project._id,
+        ...actor,
+        type: ACTIVITY_TYPES.DOCUMENT_CREATED,
+        entityType: ACTIVITY_ENTITY_TYPES.DOCUMENT,
+        entityId: document._id,
+        entityName: document.title,
+        session,
+      });
+    });
+  } finally {
+    await session.endSession();
+  }
+  return document;
+};
+
+exports.uploadDocument = async (req, res) => {
+  try {
+    const { projectId, title } = req.body;
+    if (typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ message: 'Document title is required.' });
+    }
+    if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json({ message: 'Valid project ID is required.' });
+    }
+    if (!req.file) {
+      return res.status(400).json({
+        code: 'DOCUMENT_FILE_REQUIRED',
+        message: 'A document file is required.',
+      });
+    }
+
+    const project = await findProjectForOwner(projectId, req.user.id);
+    if (!project) return res.status(404).json({ message: 'Project not found.' });
+
+    const extracted = await extractDocumentFile(req.file);
+    const preparedChunks = await prepareDocumentChunks(extracted.text);
+    const actor = await resolveActorSnapshot(req.user.id);
+    const document = await persistPreparedDocument({
+      title: title.trim(),
+      content: extracted.text,
+      project,
+      uploadedBy: req.user.id,
+      sourceType: 'file',
+      metadata: extracted.metadata,
+      preparedChunks,
+      actor,
+    });
+
+    return res.status(201).json({
+      message: 'Document uploaded successfully.',
+      document,
+    });
+  } catch (error) {
+    if (error instanceof DocumentFileError || error instanceof DocumentEmbeddingLimitError) {
+      return res.status(error.httpStatus).json({ code: error.code, message: error.message });
+    }
+    if (sendGeminiErrorResponse({ error, feature: 'document_embedding', res })) {
+      return undefined;
+    }
+    console.error('Upload document error:', error);
+    return res.status(500).json({ message: 'Failed to upload document.' });
+  }
+};
 
 // Create a document
 exports.createDocument = async (req, res) => {

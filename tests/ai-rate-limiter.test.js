@@ -6,6 +6,7 @@ const { aiLimiter } = require('../src/middleware/rateLimiters');
 
 jest.mock('../src/middleware/authMiddleware', () => jest.fn((req, res, next) => next()));
 jest.mock('../src/controllers/documentController', () => ({
+  uploadDocument: jest.fn(),
   createDocument: jest.fn(),
   getProjectDocuments: jest.fn(),
   getDocument: jest.fn(),
@@ -16,11 +17,14 @@ jest.mock('../src/controllers/documentController', () => ({
 describe('shared authenticated-user AI limiting', () => {
   test('places authentication before the same AI limiter on document create and update', () => {
     const documentRoutes = require('../src/routes/documentRoutes');
+    const uploadStack = documentRoutes.stack.find((layer) => layer.route?.path === '/upload').route.stack;
     const createStack = documentRoutes.stack.find((layer) => layer.route?.path === '/').route.stack;
     const updateStack = documentRoutes.stack.find((layer) => (
       layer.route?.path === '/:id' && layer.route.methods.patch
     )).route.stack;
 
+    expect(uploadStack[0].handle).toBe(authMiddleware);
+    expect(uploadStack[1].handle).toBe(aiLimiter);
     expect(createStack[0].handle).toBe(authMiddleware);
     expect(createStack[1].handle).toBe(aiLimiter);
     expect(updateStack[0].handle).toBe(authMiddleware);
