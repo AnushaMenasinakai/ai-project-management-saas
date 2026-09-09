@@ -2,6 +2,7 @@ import Alert from '../Alert';
 import Button from '../Button';
 import Card from '../Card';
 import DocumentCard from './DocumentCard';
+import { formatFileSize, getDocumentFileTypeLabel } from '../../utils/documentUtils';
 
 const DocumentsSection = ({
   documents,
@@ -13,6 +14,13 @@ const DocumentsSection = ({
   documentContent,
   creatingDocument,
   createError,
+  createMode,
+  uploadTitle,
+  uploadFile,
+  uploadInputVersion,
+  uploadingDocument,
+  uploadError,
+  uploadSuccess,
   mutationInProgress,
   editingDocumentId,
   editTitle,
@@ -24,6 +32,11 @@ const DocumentsSection = ({
   onCreate,
   onCreateTitleChange,
   onCreateContentChange,
+  onCreateModeChange,
+  onUploadTitleChange,
+  onUploadFileChange,
+  onRemoveUploadFile,
+  onUpload,
   onStartEdit,
   onEditTitleChange,
   onEditContentChange,
@@ -37,23 +50,47 @@ const DocumentsSection = ({
       <p>Reference material for this project.</p>
     </div>
     {isProjectOwner && (
-      <form className="document-form document-create-form" onSubmit={onCreate}>
+      <form className="document-form document-create-form" onSubmit={createMode === 'text' ? onCreate : onUpload}>
         <div className="document-form__header">
           <p className="section-eyebrow">Create document</p>
           <h3>Add project knowledge</h3>
-          <p>Create a text reference that the project can use.</p>
+          <p>Paste text or upload a file to add project knowledge.</p>
         </div>
-        <div className="document-field">
-          <label htmlFor="document-title">Document title</label>
-          <input id="document-title" type="text" value={documentTitle} onChange={onCreateTitleChange} placeholder="Enter document title" />
-        </div>
-        <div className="document-field">
-          <label htmlFor="document-content">Document content</label>
-          <textarea id="document-content" value={documentContent} onChange={onCreateContentChange} placeholder="Enter document content" rows={5} />
-        </div>
-        {createError && <Alert>{createError}</Alert>}
+        <fieldset className="document-create-mode">
+          <legend>Document source</legend>
+          <label><input type="radio" name="document-create-mode" checked={createMode === 'text'} onChange={() => onCreateModeChange('text')} /><span>Paste text</span></label>
+          <label><input type="radio" name="document-create-mode" checked={createMode === 'upload'} onChange={() => onCreateModeChange('upload')} /><span>Upload file</span></label>
+        </fieldset>
+        {createMode === 'text' ? <>
+          <div className="document-field">
+            <label htmlFor="document-title">Document title</label>
+            <input id="document-title" type="text" value={documentTitle} onChange={onCreateTitleChange} placeholder="Enter document title" />
+          </div>
+          <div className="document-field">
+            <label htmlFor="document-content">Document content</label>
+            <textarea id="document-content" value={documentContent} onChange={onCreateContentChange} placeholder="Enter document content" rows={5} />
+          </div>
+          {createError && <Alert>{createError}</Alert>}
+        </> : <>
+          <div className="document-field">
+            <label htmlFor="upload-document-title">Document title</label>
+            <input id="upload-document-title" type="text" value={uploadTitle} onChange={onUploadTitleChange} placeholder="Enter document title" />
+          </div>
+          <div className="document-field">
+            <label htmlFor="document-file">File</label>
+            <input key={uploadInputVersion} id="document-file" type="file" accept=".txt,.pdf,.docx" onChange={onUploadFileChange} />
+            <p className="document-field__help">TXT, text-based PDF, or DOCX. Maximum 5 MB.</p>
+          </div>
+          {uploadFile && <div className="document-upload-selection" aria-label="Selected file">
+            <div><strong>{uploadFile.name}</strong><span>{getDocumentFileTypeLabel(uploadFile)} · {formatFileSize(uploadFile.size)}</span></div>
+            <Button type="button" variant="secondary" onClick={onRemoveUploadFile} disabled={uploadingDocument}>Remove file</Button>
+          </div>}
+          {uploadingDocument && <p className="document-message" role="status" aria-live="polite">Extracting and indexing…</p>}
+          {uploadError && <Alert>{uploadError}</Alert>}
+          {uploadSuccess && <p className="document-upload-success" role="status">{uploadSuccess}</p>}
+        </>}
         <div className="document-actions">
-          <Button type="submit" disabled={mutationInProgress}>{creatingDocument ? 'Creating...' : 'Create Document'}</Button>
+          <Button type="submit" disabled={mutationInProgress}>{createMode === 'text' ? (creatingDocument ? 'Creating...' : 'Create Document') : (uploadingDocument ? 'Extracting and indexing…' : 'Upload Document')}</Button>
         </div>
       </form>
     )}

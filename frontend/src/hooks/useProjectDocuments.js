@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../services/api';
 import { formatAiError } from '../utils/aiErrorUtils';
+import { getUploadFileValidationError } from '../utils/documentUtils';
 
 const useProjectDocuments = (projectId) => {
   const [resource, setResource] = useState({ projectId: null, documents: [], error: '' });
@@ -15,15 +16,31 @@ const useProjectDocuments = (projectId) => {
   const [editDocumentError, setEditDocumentError] = useState('');
   const [deletingDocumentId, setDeletingDocumentId] = useState(null);
   const [deleteDocumentError, setDeleteDocumentError] = useState('');
+  const [createModeResource, setCreateModeResource] = useState({ projectId: null, mode: 'text' });
+  const [uploadResource, setUploadResource] = useState({
+    projectId: null,
+    title: '',
+    file: null,
+    error: '',
+    success: '',
+    inputVersion: 0,
+  });
+  const [uploadingProjectId, setUploadingProjectId] = useState(null);
+  const projectIdRef = useRef(projectId);
+  const uploadRequestIdRef = useRef(0);
+  const uploadPendingRef = useRef(false);
+  projectIdRef.current = projectId;
 
   const refreshDocuments = useCallback(async () => {
     setResource((current) => ({ ...current, projectId, error: '', loading: true }));
     try {
       const response = await api.get(`/documents/project/${projectId}`);
+      if (projectIdRef.current !== projectId) return null;
       setResource({ projectId, documents: response.data.documents, error: '', loading: false });
       return response.data.documents;
     } catch (error) {
       console.error('Fetch documents error:', error);
+      if (projectIdRef.current !== projectId) return null;
       setResource((current) => ({
         projectId,
         documents: current.projectId === projectId ? current.documents : [],
@@ -35,6 +52,8 @@ const useProjectDocuments = (projectId) => {
   }, [projectId]);
 
   useEffect(() => {
+    uploadRequestIdRef.current += 1;
+    uploadPendingRef.current = false;
     let active = true;
     api.get(`/documents/project/${projectId}`)
       .then((response) => {
@@ -53,6 +72,105 @@ const useProjectDocuments = (projectId) => {
       });
     return () => { active = false; };
   }, [projectId]);
+
+  const createMode = createModeResource.projectId === projectId ? createModeResource.mode : 'text';
+  const currentUpload = uploadResource.projectId === projectId
+    ? uploadResource
+    : { title: '', file: null, error: '', success: '', inputVersion: 0 };
+  const uploadingDocument = uploadingProjectId === projectId;
+
+  const setCreateMode = (mode) => {
+    if (mode !== 'text' && mode !== 'upload') return;
+    setCreateModeResource({ projectId, mode });
+  };
+
+  const setUploadTitle = (title) => {
+    setUploadResource((current) => ({
+      ...(current.projectId === projectId ? current : {}),
+      projectId,
+      title,
+      file: current.projectId === projectId ? current.file : null,
+      error: '',
+      success: '',
+      inputVersion: current.projectId === projectId ? current.inputVersion : 0,
+    }));
+  };
+
+  const selectUploadFile = (file) => {
+    const error = getUploadFileValidationError(file);
+    setUploadResource((current) => ({
+      ...(current.projectId === projectId ? current : {}),
+      projectId,
+      title: current.projectId === projectId ? current.title : '',
+      file,
+      error,
+      success: '',
+      inputVersion: current.projectId === projectId ? current.inputVersion : 0,
+    }));
+  };
+
+  const removeUploadFile = () => {
+    setUploadResource((current) => ({
+      ...(current.projectId === projectId ? current : {}),
+      projectId,
+      file: null,
+      error: '',
+      success: '',
+      inputVersion: (current.projectId === projectId ? current.inputVersion : 0) + 1,
+    }));
+  };
+
+  const uploadDocument = async (event) => {
+    event.preventDefault();
+    if (uploadPendingRef.current) return;
+    const title = currentUpload.title.trim();
+    const validationError = !title
+      ? 'Document title is required.'
+      : getUploadFileValidationError(currentUpload.file);
+    if (validationError) {
+      setUploadResource((current) => ({ ...current, projectId, error: validationError, success: '' }));
+      return;
+    }
+
+    const requestProjectId = projectId;
+    const requestId = uploadRequestIdRef.current + 1;
+    uploadRequestIdRef.current = requestId;
+    uploadPendingRef.current = true;
+    setUploadingProjectId(requestProjectId);
+    setUploadResource((current) => ({ ...current, projectId, error: '', success: '' }));
+    const formData = new FormData();
+    formData.append('projectId', requestProjectId);
+    formData.append('title', title);
+    formData.append('file', currentUpload.file);
+
+    try {
+      await api.post('/documents/upload', formData);
+      if (projectIdRef.current !== requestProjectId || uploadRequestIdRef.current !== requestId) return;
+      setUploadResource((current) => ({
+        ...current,
+        projectId: requestProjectId,
+        title: '',
+        file: null,
+        error: '',
+        success: 'Document uploaded and indexed successfully.',
+        inputVersion: current.inputVersion + 1,
+      }));
+      await refreshDocuments();
+    } catch (error) {
+      if (projectIdRef.current !== requestProjectId || uploadRequestIdRef.current !== requestId) return;
+      setUploadResource((current) => ({
+        ...current,
+        projectId: requestProjectId,
+        error: formatAiError(error, 'Failed to upload document.'),
+        success: '',
+      }));
+    } finally {
+      setUploadingProjectId((current) => (current === requestProjectId ? null : current));
+      if (projectIdRef.current === requestProjectId && uploadRequestIdRef.current === requestId) {
+        uploadPendingRef.current = false;
+      }
+    }
+  };
 
   const resetDocumentEdit = () => {
     setEditingDocumentId(null);
@@ -165,7 +283,19 @@ const useProjectDocuments = (projectId) => {
     editDocumentError,
     deletingDocumentId,
     deleteDocumentError,
-    documentMutationInProgress: creatingDocument || savingDocument || deletingDocumentId !== null,
+    documentMutationInProgress: creatingDocument || uploadingDocument || savingDocument || deletingDocumentId !== null,
+    createMode,
+    setCreateMode,
+    uploadTitle: currentUpload.title,
+    setUploadTitle,
+    uploadFile: currentUpload.file,
+    selectUploadFile,
+    removeUploadFile,
+    uploadInputVersion: currentUpload.inputVersion,
+    uploadingDocument,
+    uploadDocumentError: currentUpload.error,
+    uploadDocumentSuccess: currentUpload.success,
+    uploadDocument,
     createDocument,
     updateDocument,
     deleteDocument,

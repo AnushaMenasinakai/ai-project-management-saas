@@ -1,6 +1,7 @@
 import Alert from '../Alert';
 import Badge from '../Badge';
 import Button from '../Button';
+import { formatFileSize, getDocumentFileTypeLabel } from '../../utils/documentUtils';
 
 const DocumentCard = ({
   document,
@@ -25,7 +26,14 @@ const DocumentCard = ({
       <div>
         <h3 className="document-card__title">{document.title}</h3>
         {document.sourceType && (
-          <Badge className="document-source">{formatLabel(document.sourceType)}</Badge>
+          <Badge className="document-source">{document.sourceType === 'file' ? getDocumentFileTypeLabel(document) : formatLabel(document.sourceType)}</Badge>
+        )}
+        {document.sourceType === 'file' && (document.originalFilename || document.fileSize != null || document.pageCount) && (
+          <p className="document-card__file-metadata">
+            {document.originalFilename && <span>{document.originalFilename}</span>}
+            {document.fileSize != null && formatFileSize(document.fileSize) && <span>{formatFileSize(document.fileSize)}</span>}
+            {document.pageCount && <span>{document.pageCount} {document.pageCount === 1 ? 'page' : 'pages'}</span>}
+          </p>
         )}
         {document.content && <p className="document-card__preview">{document.content}</p>}
       </div>

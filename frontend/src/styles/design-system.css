@@ -1717,6 +1717,19 @@ select[multiple] { max-width: 100%; }
 .document-create-form textarea { min-height: 7rem; }
 .document-form__header h3 { margin: var(--space-1) 0; }
 .document-form__header > p:last-child { color: var(--color-text-muted); margin: 0; }
+.document-create-mode { border: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; }
+.document-create-mode legend { font-weight: 700; margin-bottom: var(--space-2); width: 100%; }
+.document-create-mode label { align-items: center; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; display: flex; gap: var(--space-2); min-height: 2.75rem; padding: var(--space-2) var(--space-3); }
+.document-create-mode label:has(input:checked) { background: var(--color-primary-soft); border-color: var(--color-primary); color: var(--color-primary); }
+.document-create-mode input { margin: 0; }
+.document-field__help { color: var(--color-text-muted); font-size: .8rem; margin: var(--space-1) 0 0; }
+.document-upload-selection { align-items: center; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); display: flex; gap: var(--space-3); justify-content: space-between; min-width: 0; padding: var(--space-3); }
+.document-upload-selection > div { display: grid; gap: var(--space-1); min-width: 0; }
+.document-upload-selection strong { overflow-wrap: anywhere; }
+.document-upload-selection span, .document-card__file-metadata { color: var(--color-text-muted); font-size: .8rem; }
+.document-upload-success { color: var(--color-success); font-weight: 700; margin: 0; }
+.document-card__file-metadata { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 0; }
+.document-card__file-metadata span:not(:last-child)::after { content: '·'; margin-left: var(--space-2); }
 .document-list-heading, .project-qa-sources__header, .project-qa-source__header { align-items: center; display: flex; gap: var(--space-3); justify-content: space-between; }
 .document-list-heading { border-top: 1px solid var(--color-border); padding-top: var(--space-5); }
 .document-list-heading h3, .project-qa-sources__header h3 { margin: 0; }
@@ -1767,6 +1780,9 @@ select[multiple] { max-width: 100%; }
   .document-card__header > .document-actions { align-self: stretch; justify-content: flex-start; width: 100%; }
   .document-card .document-actions .button { flex: 1 1 8rem; }
   .document-create-form .document-actions .button { width: 100%; }
+  .document-create-mode { display: grid; grid-template-columns: 1fr; }
+  .document-upload-selection { align-items: stretch; flex-direction: column; }
+  .document-upload-selection .button { width: 100%; }
 }
 
 /* Final refinement: viewport-fit auth spacing and compact in-app type scale. */

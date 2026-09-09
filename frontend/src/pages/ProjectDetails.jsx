@@ -109,6 +109,17 @@ const ProjectDetails = () => {
     setDocumentContent,
     creatingDocument,
     createDocumentError,
+    createMode: documentCreateMode,
+    setCreateMode: setDocumentCreateMode,
+    uploadTitle: uploadDocumentTitle,
+    setUploadTitle: setUploadDocumentTitle,
+    uploadFile: uploadDocumentFile,
+    selectUploadFile: selectUploadDocumentFile,
+    removeUploadFile: removeUploadDocumentFile,
+    uploadInputVersion,
+    uploadingDocument,
+    uploadDocumentError,
+    uploadDocumentSuccess,
     editingDocumentId,
     editDocumentTitle,
     setEditDocumentTitle,
@@ -120,6 +131,7 @@ const ProjectDetails = () => {
     deleteDocumentError,
     documentMutationInProgress,
     createDocument,
+    uploadDocument,
     updateDocument,
     deleteDocument,
     startDocumentEdit,
@@ -302,6 +314,13 @@ return (
       documentContent={documentContent}
       creatingDocument={creatingDocument}
       createError={createDocumentError}
+      createMode={documentCreateMode}
+      uploadTitle={uploadDocumentTitle}
+      uploadFile={uploadDocumentFile}
+      uploadInputVersion={uploadInputVersion}
+      uploadingDocument={uploadingDocument}
+      uploadError={uploadDocumentError}
+      uploadSuccess={uploadDocumentSuccess}
       mutationInProgress={documentMutationInProgress}
       editingDocumentId={editingDocumentId}
       editTitle={editDocumentTitle}
@@ -313,6 +332,11 @@ return (
       onCreate={createDocument}
       onCreateTitleChange={(event) => setDocumentTitle(event.target.value)}
       onCreateContentChange={(event) => setDocumentContent(event.target.value)}
+      onCreateModeChange={setDocumentCreateMode}
+      onUploadTitleChange={(event) => setUploadDocumentTitle(event.target.value)}
+      onUploadFileChange={(event) => selectUploadDocumentFile(event.target.files?.[0] || null)}
+      onRemoveUploadFile={removeUploadDocumentFile}
+      onUpload={uploadDocument}
       onStartEdit={startDocumentEdit}
       onEditTitleChange={(event) => setEditDocumentTitle(event.target.value)}
       onEditContentChange={(event) => setEditDocumentContent(event.target.value)}

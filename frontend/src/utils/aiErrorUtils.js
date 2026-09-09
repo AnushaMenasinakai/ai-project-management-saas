@@ -5,6 +5,13 @@ const aiErrorMessages = Object.freeze({
   AI_CONFIGURATION_ERROR: 'The AI service is currently unavailable because its configuration needs attention.',
   AI_INVALID_RESPONSE: 'The AI service returned an invalid response. Please try again later.',
   AI_ERROR: 'The AI request could not be completed. Please try again later.',
+  DOCUMENT_FILE_REQUIRED: 'Choose a TXT, PDF, or Word file to upload.',
+  DOCUMENT_UPLOAD_INVALID: 'The upload could not be processed. Check the file and try again.',
+  DOCUMENT_FILE_UNSUPPORTED: 'This file type is not supported. Choose a TXT, PDF, or DOCX file.',
+  DOCUMENT_FILE_INVALID: 'This file is invalid, corrupt, or protected and could not be read.',
+  DOCUMENT_FILE_EMPTY: 'No usable text was found in this file.',
+  DOCUMENT_FILE_TOO_LARGE: 'This file is larger than the 5 MB upload limit.',
+  DOCUMENT_EXTRACTED_TEXT_TOO_LARGE: 'The extracted document text is too large to index.',
   DOCUMENT_EMBEDDING_LIMIT_EXCEEDED: 'This document exceeds the current AI embedding limit. Shorten the content and try again.',
 });
 
