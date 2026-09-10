@@ -2,6 +2,7 @@ import Alert from '../Alert';
 import Badge from '../Badge';
 import Button from '../Button';
 import Card from '../Card';
+import { formatTaskDueDate, isTaskOverdue } from '../../features/project-details/projectDetailsUtils';
 
 const TaskCard = ({
   task,
@@ -37,7 +38,10 @@ const TaskCard = ({
       <div><dt>Assigned to</dt><dd>{task.assignedTo?.name || 'Unassigned'}</dd></div>
       <div>
         <dt>Due date</dt>
-        <dd>{task.dueDate ? new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'No due date'}</dd>
+        <dd>
+          {task.dueDate ? <time dateTime={task.dueDate}>{formatTaskDueDate(task.dueDate)}</time> : 'No due date'}
+          {isTaskOverdue(task) && <span className="task-overdue-label">Overdue</span>}
+        </dd>
       </div>
     </dl>
     {task.dependencies && task.dependencies.length > 0 && (

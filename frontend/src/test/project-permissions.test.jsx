@@ -148,6 +148,7 @@ describe('Project Details permission visibility', () => {
     expect(await screen.findByText('Shared Project')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create Task' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit Task' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate with AI' }));
     expect(screen.getByRole('button', { name: 'Generate Tasks with AI' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit Project' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete Project' })).not.toBeInTheDocument();
@@ -176,6 +177,8 @@ describe('Project Details permission visibility', () => {
     } } });
     renderProject('owner-1');
     expect(await screen.findByText('Critical task')).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate with AI' }));
     const generate = screen.getByRole('button', { name: 'Generate Tasks with AI' });
     fireEvent.click(generate);
     fireEvent.click(generate);

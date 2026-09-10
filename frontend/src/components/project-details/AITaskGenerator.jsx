@@ -1,19 +1,27 @@
 import Alert from '../Alert';
+import Button from '../Button';
 
 const AITaskGenerator = ({
   generatingTasks,
   generateTasksError,
   generateTasksSuccess,
   onGenerate,
+  onClose,
 }) => (
   <section className="ai-task-generation" aria-labelledby="ai-task-generation-heading">
-    <h3 id="ai-task-generation-heading">AI Task Generation</h3>
-    <p className="ai-task-generation__description">
-      Generate a set of tasks from this project's name and description.
-    </p>
-    <button type="button" onClick={onGenerate} disabled={generatingTasks}>
+    <div className="ai-task-generation__header">
+      <div>
+        <p className="section-eyebrow">Secondary creation workflow</p>
+        <h3 id="ai-task-generation-heading">Generate tasks with AI</h3>
+        <p className="ai-task-generation__description">
+          Generate a validated set of tasks from this project's name and description.
+        </p>
+      </div>
+      <Button type="button" variant="secondary" disabled={generatingTasks} onClick={onClose}>Close</Button>
+    </div>
+    <Button type="button" onClick={onGenerate} disabled={generatingTasks}>
       {generatingTasks ? 'Generating Tasks...' : 'Generate Tasks with AI'}
-    </button>
+    </Button>
     <p className="ai-task-generation__note">
       Running AI generation again will create another set of tasks.
     </p>

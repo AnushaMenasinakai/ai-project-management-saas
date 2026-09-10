@@ -31,7 +31,8 @@ const tasks = [
 ];
 
 const renderTasks = ({
-  filteredTasks = tasks,
+  sourceTasks = tasks,
+  filteredTasks = sourceTasks,
   isProjectOwner = true,
   onMoveTask = vi.fn(),
   pendingTaskMoves = new Set(),
@@ -40,7 +41,7 @@ const renderTasks = ({
   filters = { search: '', status: 'all', priority: 'all', sort: 'created_desc' },
 } = {}) => render(
   <TasksSection
-    tasks={tasks}
+    tasks={sourceTasks}
     filteredTasks={filteredTasks}
     members={[]}
     isProjectOwner={isProjectOwner}
@@ -80,6 +81,25 @@ const renderTasks = ({
 );
 
 describe('Kanban board foundation', () => {
+  test('labels only incomplete past-due tasks as overdue', () => {
+    const datedTasks = [
+      { ...tasks[0], _id: 'overdue', title: 'Overdue work', dueDate: '2020-01-01T00:00:00.000Z' },
+      { ...tasks[2], _id: 'completed-old', title: 'Completed old work', dueDate: '2020-01-01T00:00:00.000Z' },
+      { ...tasks[1], _id: 'undated', title: 'Undated work', dueDate: null },
+    ];
+    renderTasks({ sourceTasks: datedTasks, filteredTasks: datedTasks });
+
+    expect(screen.getByText('Overdue')).toBeInTheDocument();
+    expect(screen.getByText('Overdue work').closest('article')).toHaveTextContent('Overdue');
+    expect(screen.getByText('Completed old work').closest('article')).not.toHaveTextContent('Overdue');
+    expect(screen.getByText('Undated work').closest('article')).not.toHaveTextContent('Overdue');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Board' }));
+    expect(screen.getByText('Overdue work').closest('article')).toHaveTextContent('Overdue');
+    expect(screen.getByText('Completed old work').closest('article')).not.toHaveTextContent('Overdue');
+    expect(screen.getByText('Undated work').closest('article')).not.toHaveTextContent('Overdue');
+  });
+
   test('defaults to List and can switch to all three board columns and back', () => {
     renderTasks();
 

@@ -2,6 +2,7 @@ import { useDraggable } from '@dnd-kit/react';
 import Badge from '../Badge';
 import Button from '../Button';
 import Card from '../Card';
+import { formatTaskDueDate, isTaskOverdue } from '../../features/project-details/projectDetailsUtils';
 
 const KanbanTaskCard = ({
   task,
@@ -65,11 +66,8 @@ const KanbanTaskCard = ({
         <div>
           <dt>Due date</dt>
           <dd>
-            {new Date(task.dueDate).toLocaleDateString(undefined, {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            })}
+            <time dateTime={task.dueDate}>{formatTaskDueDate(task.dueDate)}</time>
+            {isTaskOverdue(task) && <span className="task-overdue-label">Overdue</span>}
           </dd>
         </div>
       )}

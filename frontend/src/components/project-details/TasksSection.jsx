@@ -49,6 +49,7 @@ const TasksSection = ({
 }) => {
   const [viewMode, setViewMode] = useState('list');
   const [activeCommentsTask, setActiveCommentsTask] = useState(null);
+  const [showAiGenerator, setShowAiGenerator] = useState(false);
   const taskFiltersActive = Boolean(
     filters.search.trim() || filters.status !== 'all' || filters.priority !== 'all',
   );
@@ -82,10 +83,13 @@ const TasksSection = ({
             Board
           </Button>
         </div>
-        <Button onClick={onShowCreate}>Create Task</Button>
+        <Button variant="secondary" onClick={() => setShowAiGenerator(true)}>Generate with AI</Button>
+        <Button aria-label="Create Task" onClick={onShowCreate}>+ Create Task</Button>
       </div>
     </div>
-    <AITaskGenerator {...aiState} onGenerate={onGenerate} />
+    {showAiGenerator && (
+      <AITaskGenerator {...aiState} onGenerate={onGenerate} onClose={() => setShowAiGenerator(false)} />
+    )}
     <div className="task-toolbar" aria-label="Task search, filters, and sorting">
       <div className="form-field task-toolbar__search">
         <label htmlFor="task-search">Search</label>

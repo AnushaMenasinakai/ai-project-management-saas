@@ -17,6 +17,21 @@ export const priorityVariant = (priority) => ({
   medium: 'warning',
 }[priority] || 'neutral');
 
+export const formatTaskDueDate = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Invalid due date';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+export const isTaskOverdue = (task, now = new Date()) => {
+  if (!task?.dueDate || task.status === 'completed') return false;
+  const dueDate = new Date(task.dueDate);
+  if (Number.isNaN(dueDate.getTime()) || Number.isNaN(now.getTime())) return false;
+  const dueDay = Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate());
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return dueDay < today;
+};
+
 export const isProjectOwner = (project, user) => {
   const ownerId = project?.owner?._id || project?.owner;
   return Boolean(user?.id && ownerId && user.id.toString() === ownerId.toString());
