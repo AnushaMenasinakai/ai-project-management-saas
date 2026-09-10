@@ -1,13 +1,21 @@
 import { Navigate, useNavigate } from 'react-router-dom';
+import Alert from '../components/Alert';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import LoadingState from '../components/LoadingState';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../context/AuthContext';
+import useDashboardData from '../hooks/useDashboardData';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
+  const {
+    summary,
+    loading: dashboardLoading,
+    error,
+    retry,
+  } = useDashboardData(user?._id || user?.id);
 
   if (loading) {
     return <LoadingState message="Loading your workspace..." />;
@@ -25,6 +33,15 @@ const Dashboard = () => {
         description="Plan work, collaborate with your team, and turn project context into action with AI."
       />
 
+      {dashboardLoading && <LoadingState message="Loading dashboard data..." />}
+
+      {error && (
+        <Alert title="Dashboard data could not be loaded">
+          <p>{error}</p>
+          <Button variant="secondary" onClick={retry}>Retry</Button>
+        </Alert>
+      )}
+
       <Card className="dashboard-next-step" aria-labelledby="dashboard-next-step-title">
           <div className="dashboard-next-step__icon" aria-hidden="true">
             <svg viewBox="0 0 24 24">
@@ -34,7 +51,17 @@ const Dashboard = () => {
           <div>
             <p className="dashboard-next-step__label">Project workspace</p>
             <h2 id="dashboard-next-step-title">Your projects, one place</h2>
-            <p>Open your project workspace to manage tasks, documents, members, and AI tools.</p>
+            {!dashboardLoading && !error && (
+              <p aria-label="Workspace summary">
+                {summary.totalProjects} {summary.totalProjects === 1 ? 'project' : 'projects'}
+                {' · '}{summary.totalTasks === 0
+                  ? 'No tasks yet'
+                  : `${summary.totalTasks} tasks · ${summary.completedTasks} completed · ${summary.overallProgressPercentage}% overall progress`}
+              </p>
+            )}
+            {(dashboardLoading || error) && (
+              <p>Open your project workspace to manage tasks, documents, members, and AI tools.</p>
+            )}
           </div>
           <Button onClick={() => navigate('/projects')}>
             Open projects
