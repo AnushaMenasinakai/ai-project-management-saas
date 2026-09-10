@@ -20,13 +20,13 @@ const task = {
   status: 'todo', priority: 'high', dependencies: [], createdAt: '2026-01-01T00:00:00.000Z',
 };
 
-const configureProjectApi = (ownerId) => {
+const configureProjectApi = (ownerId, members = []) => {
   api.get.mockImplementation((url) => {
     if (url === '/projects/project-1') return Promise.resolve({ data: { project: {
       _id: 'project-1', name: 'Shared Project', description: 'Shared context', status: 'active', owner: ownerId,
     } } });
     if (url === '/tasks/project/project-1') return Promise.resolve({ data: { tasks: [task] } });
-    if (url === '/projects/project-1/members') return Promise.resolve({ data: { members: [] } });
+    if (url === '/projects/project-1/members') return Promise.resolve({ data: { members } });
     if (url === '/projects/project-1/health') return Promise.resolve({ data: { health: {
       asOf: '2026-09-10T00:00:00.000Z', status: 'insufficient_data', reasons: ['no_tasks'],
       project: { _id: 'project-1', name: 'Shared Project', status: 'active', dueDateStatus: 'no_due_date' },
@@ -42,8 +42,8 @@ const configureProjectApi = (ownerId) => {
   });
 };
 
-const renderProject = (ownerId, workspace = 'project-tasks') => {
-  configureProjectApi(ownerId);
+const renderProject = (ownerId, workspace = 'project-tasks', members = []) => {
+  configureProjectApi(ownerId, members);
   return render(
     <MemoryRouter initialEntries={[`/projects/project-1#${workspace}`]}>
       <Routes><Route path="/projects/:id" element={<ProjectDetails />} /></Routes>
@@ -71,6 +71,17 @@ beforeEach(() => {
 });
 
 describe('Project Details permission visibility', () => {
+  test('renders a compact, accessible member identity and member-specific remove action', async () => {
+    renderProject('owner-1', 'project-members', [{
+      _id: 'member-1', name: 'Sanju Kumar', email: 'sanju@example.com',
+    }]);
+
+    expect(await screen.findByText('1 person can collaborate in this project.')).toBeInTheDocument();
+    expect(screen.getByText('Sanju Kumar')).toBeInTheDocument();
+    expect(screen.getByText('sanju@example.com')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove Sanju Kumar' })).toBeInTheDocument();
+  });
+
   test('keeps URL workspace navigation, active state, and visible content synchronized', async () => {
     renderProjectWorkspace();
     await screen.findByText('Shared Project');

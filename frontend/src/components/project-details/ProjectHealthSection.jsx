@@ -17,16 +17,19 @@ import Button from '../Button';
 import Card from '../Card';
 import LoadingState from '../LoadingState';
 
-const metricItems = [
+const summaryMetricItems = [
   ['totalTasks', 'Total tasks'],
-  ['completedTasks', 'Completed'],
+  ['completedTasks', 'Completed tasks'],
+  ['overdueTasks', 'Overdue tasks'],
+  ['blockedTasks', 'Blocked tasks'],
+];
+
+const detailMetricItems = [
   ['inProgressTasks', 'In progress'],
   ['todoTasks', 'To do'],
-  ['overdueTasks', 'Overdue'],
   ['dueSoonTasks', 'Due soon'],
   ['highPriorityIncompleteTasks', 'High priority incomplete'],
   ['unassignedIncompleteTasks', 'Unassigned incomplete'],
-  ['blockedTasks', 'Blocked'],
 ];
 
 const ProjectHealthSection = ({ projectId, active = false }) => {
@@ -58,9 +61,9 @@ const ProjectHealthSection = ({ projectId, active = false }) => {
     >
       <div className="section-heading project-health__header">
         <div>
-          <p className="section-eyebrow">Current project data</p>
-          <h2 id="project-health-heading">Health</h2>
-          <p>Transparent indicators based on tasks, deadlines, assignments, and dependencies.</p>
+          <p className="section-eyebrow">Project health</p>
+          <h2 id="project-health-heading">Project overview</h2>
+          <p>Monitor delivery progress, blockers, overdue work, and overall project health.</p>
         </div>
         {!initialized ? (
           <Button variant="secondary" onClick={fetchHealth}>Load health</Button>
@@ -85,12 +88,24 @@ const ProjectHealthSection = ({ projectId, active = false }) => {
       {health && (
         <div className="project-health__content">
           <section className="project-health__summary" aria-labelledby="health-summary-heading">
-            <div>
+            <div className="project-health__status-copy">
               <p className="section-eyebrow">Overall status</p>
               <h3 id="health-summary-heading">
                 <Badge variant={healthStatusVariant(health.status)}>{formatHealthStatus(health.status)}</Badge>
               </h3>
               <p>This classification reflects current project data and transparent rules; it is not a guaranteed prediction.</p>
+              <div className="project-health__reason-summary">
+                <strong>Why this status</strong>
+                {health.reasons.length ? (
+                  <ul className="project-health__reasons">
+                    {health.reasons.map((reason, index) => (
+                      <li key={`${reason}-${index}`}>{formatHealthReason(reason)}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No current rule-based health concerns were identified.</p>
+                )}
+              </div>
             </div>
             <div className="project-health__due">
               <strong>Project due status</strong>
@@ -101,25 +116,22 @@ const ProjectHealthSection = ({ projectId, active = false }) => {
             </div>
           </section>
 
-          <section aria-labelledby="health-progress-heading">
-            <div className="project-health__section-title">
-              <h3 id="health-progress-heading">Completion progress</h3>
-              <span>{hasTasks ? `${metrics.completedTasks} of ${metrics.totalTasks} tasks` : 'No tasks yet'}</span>
-            </div>
-            {hasTasks ? (
-              <div className="project-health__progress">
-                <progress value={metrics.completionPercentage} max="100" aria-label="Project task completion" />
-                <strong>{metrics.completionPercentage}%</strong>
-              </div>
-            ) : (
-              <p>Health indicators become useful after tasks are added.</p>
-            )}
-          </section>
-
           <section aria-labelledby="health-metrics-heading">
-            <h3 id="health-metrics-heading">Metrics</h3>
-            <dl className="project-health__metrics">
-              {metricItems.map(([key, label]) => (
+            <h3 id="health-metrics-heading">Health at a glance</h3>
+            <dl className="project-health__metrics project-health__metrics--summary">
+              <div className="project-health__metric project-health__metric--progress">
+                <dt>Completion</dt>
+                <dd>{hasTasks ? `${metrics.completionPercentage}%` : 'No tasks yet'}</dd>
+                {hasTasks ? (
+                  <>
+                    <progress value={metrics.completionPercentage} max="100" aria-label="Project task completion" />
+                    <span>{metrics.completedTasks} of {metrics.totalTasks} tasks</span>
+                  </>
+                ) : (
+                  <span>Health indicators become useful after tasks are added.</span>
+                )}
+              </div>
+              {summaryMetricItems.map(([key, label]) => (
                 <div className="project-health__metric" key={key}>
                   <dt>{label}</dt>
                   <dd>{metrics[key]}</dd>
@@ -128,17 +140,16 @@ const ProjectHealthSection = ({ projectId, active = false }) => {
             </dl>
           </section>
 
-          <section aria-labelledby="health-reasons-heading">
-            <h3 id="health-reasons-heading">Why this status</h3>
-            {health.reasons.length ? (
-              <ul className="project-health__reasons">
-                {health.reasons.map((reason, index) => (
-                  <li key={`${reason}-${index}`}>{formatHealthReason(reason)}</li>
-                ))}
-              </ul>
-            ) : (
-              <p>No current rule-based health concerns were identified.</p>
-            )}
+          <section aria-labelledby="health-work-heading">
+            <h3 id="health-work-heading">Work breakdown</h3>
+            <dl className="project-health__metrics project-health__metrics--details">
+              {detailMetricItems.map(([key, label]) => (
+                <div className="project-health__metric" key={key}>
+                  <dt>{label}</dt>
+                  <dd>{metrics[key]}</dd>
+                </div>
+              ))}
+            </dl>
           </section>
 
           <section aria-labelledby="attention-tasks-heading">
@@ -182,8 +193,9 @@ const ProjectHealthSection = ({ projectId, active = false }) => {
           <section className="project-health__insight" aria-labelledby="health-insight-heading">
             <div className="project-health__section-title">
               <div>
-                <h3 id="health-insight-heading">AI insight</h3>
-                <p>Generate an explanation and suggested next steps from the health facts above.</p>
+                <p className="section-eyebrow">AI interpretation</p>
+                <h3 id="health-insight-heading">AI Insight</h3>
+                <p>Get an AI interpretation of the trusted project metrics and suggested next actions.</p>
               </div>
               <Button disabled={generating} onClick={handleGenerateInsight}>
                 {generating ? 'Generating...' : insight ? 'Generate again' : 'Generate AI insight'}

@@ -24,9 +24,9 @@ const MembersSection = ({
   <Card id="project-members" className="workspace-section members-workspace" aria-labelledby="members-heading">
     <div className="workspace-section__header">
       <div>
-        <p className="section-eyebrow">Collaboration</p>
-        <h2 id="members-heading">Members</h2>
-        <p>{members.length} {members.length === 1 ? 'member' : 'members'} can collaborate in this project.</p>
+        <p className="section-eyebrow">Members</p>
+        <h2 id="members-heading">Project members</h2>
+        <p>{members.length} {members.length === 1 ? 'person can' : 'people can'} collaborate in this project.</p>
       </div>
       {isProjectOwner && !showMemberForm && (
         <Button variant="secondary" onClick={onShowForm}>+ Add member</Button>
@@ -75,6 +75,8 @@ const MembersSection = ({
               <Button
                 type="button"
                 variant="danger-secondary"
+                className="member-row__remove"
+                aria-label={`Remove ${member.name || 'member'}`}
                 onClick={() => onRemoveMember(member._id)}
                 disabled={removingMemberId === member._id}
               >
