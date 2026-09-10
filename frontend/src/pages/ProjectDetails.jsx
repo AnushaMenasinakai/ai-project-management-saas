@@ -317,6 +317,7 @@ return (
     </WorkspacePanel>
     <WorkspacePanel active={activeWorkspace === 'project-documents'}>
     <DocumentsSection
+      key={id}
       documents={documents}
       isProjectOwner={isProjectOwner}
       loading={documentsLoading}

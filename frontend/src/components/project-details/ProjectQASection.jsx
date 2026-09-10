@@ -13,23 +13,33 @@ const ProjectQASection = ({
   onSubmit,
 }) => (
   <Card id="project-qa" className="project-qa-section workspace-section" aria-labelledby="project-qa-heading">
-    <div className="documents-section__header">
-      <h2 id="project-qa-heading">Project Q&amp;A</h2>
-      <p>Ask questions using knowledge from this project's documents.</p>
+    <div className="documents-section__header project-qa-section__header">
+      <div>
+        <p className="section-eyebrow">Project Q&amp;A</p>
+        <h2 id="project-qa-heading">Ask project documents</h2>
+        <p>Ask questions grounded in this project's uploaded knowledge. Review AI answers before acting.</p>
+      </div>
     </div>
     <form className="project-qa-form" onSubmit={onSubmit}>
+      <div className="project-qa-form__header">
+        <h3>Ask a question</h3>
+        <p id="project-question-help">Relevant document excerpts are retrieved before an answer is generated.</p>
+      </div>
       <div className="project-qa-field">
-        <label htmlFor="project-question">Ask a question</label>
+        <label htmlFor="project-question">Question</label>
         <textarea
           id="project-question"
           value={question}
           onChange={onQuestionChange}
           placeholder="Ask a question about the project documents"
+          aria-describedby="project-question-help"
           rows={3}
         />
       </div>
       {error && <Alert>{error}</Alert>}
-      <Button type="submit" disabled={loading}>{loading ? 'Asking...' : 'Ask AI'}</Button>
+      <div className="project-qa-form__actions">
+        <Button type="submit" disabled={loading}>{loading ? 'Asking...' : 'Ask AI'}</Button>
+      </div>
     </form>
     {loading && (
       <p className="project-qa-loading" role="status">

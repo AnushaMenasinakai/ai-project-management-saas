@@ -137,7 +137,8 @@ describe('Project Details permission visibility', () => {
     membersView.unmount();
 
     renderProject('owner-1', 'project-documents');
-    expect(await screen.findByRole('button', { name: 'Create Document' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Add document' }));
+    expect(screen.getByRole('button', { name: 'Create Document' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });

@@ -33,7 +33,7 @@ const ActivitySection = ({ projectId, active = false }) => {
         <div>
           <p className="section-eyebrow">Project history</p>
           <h2 id="activity-heading">Activity</h2>
-          <p>System-generated changes made across this project.</p>
+          <p>A chronological record of system-generated changes across this project.</p>
         </div>
         {!initialized && (
           <Button variant="secondary" onClick={fetchActivities}>

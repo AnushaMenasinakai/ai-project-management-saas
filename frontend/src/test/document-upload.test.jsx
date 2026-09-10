@@ -29,14 +29,20 @@ beforeEach(() => {
 });
 
 describe('document upload interface', () => {
-  test('keeps Paste text as the default and exposes upload mode only to owners', () => {
+  test('keeps the library first and opens the default Paste text flow only for owners', () => {
     const { rerender } = render(<DocumentsSection {...baseProps} />);
+    expect(screen.getByText('No project documents yet')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Document content')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '+ Add document' }));
     expect(screen.getByRole('radio', { name: 'Paste text' })).toBeChecked();
     expect(screen.getByLabelText('Document content')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: 'Upload file' }));
     expect(baseProps.onCreateModeChange).toHaveBeenCalledWith('upload');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('radio', { name: 'Upload file' })).not.toBeInTheDocument();
 
     rerender(<DocumentsSection {...baseProps} isProjectOwner={false} />);
+    expect(screen.queryByRole('button', { name: '+ Add document' })).not.toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: 'Upload file' })).not.toBeInTheDocument();
   });
 
@@ -51,6 +57,7 @@ describe('document upload interface', () => {
         mimeType: 'application/pdf', fileSize: 1536, pageCount: 2,
       }]}
     />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add document' }));
     expect(screen.getAllByText('brief.pdf')).toHaveLength(2);
     expect(screen.getByText(/PDF · 5 B/)).toBeInTheDocument();
     expect(screen.getByText('1.5 KB')).toBeInTheDocument();

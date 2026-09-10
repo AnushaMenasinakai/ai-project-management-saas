@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Alert from '../Alert';
 import Button from '../Button';
 import Card from '../Card';
@@ -43,18 +44,32 @@ const DocumentsSection = ({
   onUpdate,
   onCancelEdit,
   onDelete,
-}) => (
+}) => {
+  const [showCreatePanel, setShowCreatePanel] = useState(false);
+
+  return (
   <Card id="project-documents" className="documents-section workspace-section" aria-labelledby="documents-heading">
     <div className="documents-section__header">
-      <h2 id="documents-heading">Documents</h2>
-      <p>Reference material for this project.</p>
+      <div>
+        <p className="section-eyebrow">Documents</p>
+        <h2 id="documents-heading">Project knowledge</h2>
+        <p>Store reference material used by Project Q&amp;A and AI retrieval.</p>
+      </div>
+      {isProjectOwner && documents.length > 0 && !showCreatePanel && (
+        <Button type="button" onClick={() => setShowCreatePanel(true)}>+ Add document</Button>
+      )}
     </div>
-    {isProjectOwner && (
+    {isProjectOwner && showCreatePanel && (
       <form className="document-form document-create-form" onSubmit={createMode === 'text' ? onCreate : onUpload}>
         <div className="document-form__header">
-          <p className="section-eyebrow">Create document</p>
-          <h3>Add project knowledge</h3>
-          <p>Paste text or upload a file to add project knowledge.</p>
+          <div>
+            <p className="section-eyebrow">Add document</p>
+            <h3>Add project knowledge</h3>
+            <p>Paste text or upload a supported file for indexing.</p>
+          </div>
+          <Button type="button" variant="secondary" onClick={() => setShowCreatePanel(false)} disabled={mutationInProgress}>
+            Close
+          </Button>
         </div>
         <fieldset className="document-create-mode">
           <legend>Document source</legend>
@@ -90,6 +105,7 @@ const DocumentsSection = ({
           {uploadSuccess && <p className="document-upload-success" role="status">{uploadSuccess}</p>}
         </>}
         <div className="document-actions">
+          <Button type="button" variant="secondary" onClick={() => setShowCreatePanel(false)} disabled={mutationInProgress}>Cancel</Button>
           <Button type="submit" disabled={mutationInProgress}>{createMode === 'text' ? (creatingDocument ? 'Creating...' : 'Create Document') : (uploadingDocument ? 'Extracting and indexing…' : 'Upload Document')}</Button>
         </div>
       </form>
@@ -101,7 +117,15 @@ const DocumentsSection = ({
       <div><p className="section-eyebrow">Project documents</p><h3>Available reference material</h3></div>
       <span>{documents.length} {documents.length === 1 ? 'document' : 'documents'}</span>
     </div>
-    {!loading && !error && documents.length === 0 && <p className="document-message">No documents yet.</p>}
+    {!loading && !error && documents.length === 0 && (
+      <div className="document-empty" role="status">
+        <strong>No project documents yet</strong>
+        <p>Add text, PDF, DOCX, or TXT reference material so Project Q&amp;A can retrieve grounded context.</p>
+        {isProjectOwner && !showCreatePanel && (
+          <Button type="button" onClick={() => setShowCreatePanel(true)}>+ Add document</Button>
+        )}
+      </div>
+    )}
     {!loading && !error && documents.length > 0 && (
       <ul className="document-list">
         {documents.map((document) => (
@@ -128,6 +152,7 @@ const DocumentsSection = ({
       </ul>
     )}
   </Card>
-);
+  );
+};
 
 export default DocumentsSection;
