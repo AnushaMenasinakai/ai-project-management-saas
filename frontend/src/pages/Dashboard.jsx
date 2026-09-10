@@ -67,14 +67,14 @@ const Dashboard = () => {
               <Card as="article" className="dashboard-project-card" key={project._id}>
                 <div className="dashboard-project-card__header"><h3>{project.name}</h3><Badge variant={projectStatusVariants[project.status] || 'neutral'}>{formatProjectStatus(project.status)}</Badge></div>
                 <p className="dashboard-project-card__description">{project.description || 'No description provided.'}</p>
+                <div className="dashboard-project-card__progress"><div><span>Progress</span><strong>{project.progressPercentage === null ? 'No tasks yet' : `${project.progressPercentage}%`}</strong></div>
+                  {project.progressPercentage !== null && <div className="project-progress__track" role="progressbar" aria-label={`${project.name} progress`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={project.progressPercentage}><span style={{ width: `${project.progressPercentage}%` }} /></div>}
+                </div>
                 <dl className="dashboard-project-card__facts">
                   <div><dt>Tasks</dt><dd>{project.totalTasks}</dd></div><div><dt>Completed</dt><dd>{project.completedTasks}</dd></div>
                   {project.memberCount !== null && <div><dt>Members</dt><dd>{project.memberCount}</dd></div>}
                   <div><dt>Due</dt><dd>{project.dueDate ? <time dateTime={project.dueDate}>{formatUtcDate(project.dueDate)}</time> : 'No due date'}</dd></div>
                 </dl>
-                <div className="dashboard-project-card__progress"><div><span>Progress</span><strong>{project.progressPercentage === null ? 'No tasks yet' : `${project.progressPercentage}%`}</strong></div>
-                  {project.progressPercentage !== null && <div className="project-progress__track" role="progressbar" aria-label={`${project.name} progress`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={project.progressPercentage}><span style={{ width: `${project.progressPercentage}%` }} /></div>}
-                </div>
                 <Link className="button button--secondary dashboard-project-card__action" to={`/projects/${project._id}`}>Open project <span aria-hidden="true">→</span></Link>
               </Card>
             ))}
@@ -102,12 +102,12 @@ const Dashboard = () => {
         </div>
 
         <section className="dashboard-section" aria-labelledby="ai-quick-actions-heading">
-          <div className="dashboard-section__heading"><div><p className="section-heading__eyebrow">Shortcuts</p><h2 id="ai-quick-actions-heading">AI Quick Actions</h2><p>Open an existing workspace tool—AI runs only when you choose an action there.</p></div></div>
+          <div className="dashboard-section__heading"><div><p className="section-heading__eyebrow">Shortcuts</p><h2 id="ai-quick-actions-heading">AI Quick Actions</h2><p>Jump into your project tools and continue working with AI.</p></div></div>
           <nav className="dashboard-quick-actions" aria-label="Project and AI quick actions">
-            <Link className="dashboard-quick-action" to="/projects"><strong>Open Projects</strong><span>Choose a workspace</span></Link>
-            <Link className="dashboard-quick-action" to={projectAction('#project-qa')}><strong>Ask Project Q&amp;A</strong><span>{primaryProject ? primaryProject.name : 'Choose a project first'}</span></Link>
-            <Link className="dashboard-quick-action" to={projectAction('#project-documents')}><strong>Open Documents</strong><span>{primaryProject ? primaryProject.name : 'Choose a project first'}</span></Link>
-            <Link className="dashboard-quick-action" to={projectAction('#project-tasks')}><strong>Generate Tasks</strong><span>{primaryProject ? primaryProject.name : 'Choose a project first'}</span></Link>
+            <Link className="dashboard-quick-action" to="/projects"><span><strong>Open Projects</strong><small>Choose a workspace</small></span><span className="dashboard-quick-action__arrow" aria-hidden="true">→</span></Link>
+            <Link className="dashboard-quick-action" to={projectAction('#project-qa')}><span><strong>Ask Project Q&amp;A</strong><small>{primaryProject ? primaryProject.name : 'Choose a project first'}</small></span><span className="dashboard-quick-action__arrow" aria-hidden="true">→</span></Link>
+            <Link className="dashboard-quick-action" to={projectAction('#project-documents')}><span><strong>Open Documents</strong><small>{primaryProject ? primaryProject.name : 'Choose a project first'}</small></span><span className="dashboard-quick-action__arrow" aria-hidden="true">→</span></Link>
+            <Link className="dashboard-quick-action" to={projectAction('#project-tasks')}><span><strong>Generate Tasks</strong><small>{primaryProject ? primaryProject.name : 'Choose a project first'}</small></span><span className="dashboard-quick-action__arrow" aria-hidden="true">→</span></Link>
           </nav>
         </section>
       </>}
