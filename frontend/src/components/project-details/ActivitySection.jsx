@@ -6,7 +6,7 @@ import Card from '../Card';
 import LoadingState from '../LoadingState';
 import ActivityItem from './ActivityItem';
 
-const ActivitySection = ({ projectId }) => {
+const ActivitySection = ({ projectId, active = false }) => {
   const {
     activities,
     initialized,
@@ -20,13 +20,8 @@ const ActivitySection = ({ projectId }) => {
   } = useProjectActivity(projectId);
 
   useEffect(() => {
-    const openFromNavigation = (event) => {
-      if (event.detail?.sectionId === 'project-activity') fetchActivities();
-    };
-
-    window.addEventListener('project-section-open', openFromNavigation);
-    return () => window.removeEventListener('project-section-open', openFromNavigation);
-  }, [fetchActivities]);
+    if (active) fetchActivities();
+  }, [active, fetchActivities]);
 
   return (
     <Card

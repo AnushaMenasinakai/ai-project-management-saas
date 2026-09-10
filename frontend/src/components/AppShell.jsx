@@ -1,34 +1,19 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Button from './Button';
 import ProductBrand from './ProductBrand';
 import NotificationBell from './NotificationBell';
+import { getProjectWorkspace, getProjectWorkspaceHref, PROJECT_WORKSPACES } from '../utils/projectWorkspaceUtils';
 
 const AppShell = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeProjectSection, setActiveProjectSection] = useState('project-health');
   const userInitial = user?.name?.trim()?.charAt(0)?.toUpperCase() || 'U';
   const onProjectDetailsPage = /^\/projects\/[^/]+$/.test(location.pathname);
-
-  const projectSections = [
-    ['project-health', 'Health'],
-    ['project-members', 'Members'],
-    ['project-tasks', 'Tasks'],
-    ['project-documents', 'Documents'],
-    ['project-qa', 'Project Q&A'],
-    ['project-activity', 'Activity'],
-  ];
-
-  const scrollToProjectSection = (sectionId) => {
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    window.dispatchEvent(new CustomEvent('project-section-open', { detail: { sectionId } }));
-    setActiveProjectSection(sectionId);
-    setMobileMenuOpen(false);
-  };
+  const activeProjectSection = getProjectWorkspace(location.hash);
 
   useEffect(() => {
     if (!mobileMenuOpen) return undefined;
@@ -110,15 +95,16 @@ const AppShell = () => {
           </NavLink>
           {onProjectDetailsPage && (
             <div className="app-shell__subnav" aria-label="Project sections">
-              {projectSections.map(([sectionId, label]) => (
-                <button
+              {PROJECT_WORKSPACES.map(({ id: sectionId, label }) => (
+                <Link
                   className={`app-shell__subnav-link${activeProjectSection === sectionId ? ' app-shell__subnav-link--active' : ''}`}
-                  type="button"
                   key={sectionId}
-                  onClick={() => scrollToProjectSection(sectionId)}
+                  to={getProjectWorkspaceHref(location.pathname, sectionId)}
+                  aria-current={activeProjectSection === sectionId ? 'page' : undefined}
+                  onClick={() => setMobileMenuOpen(false)}
                 >
                   {label}
-                </button>
+                </Link>
               ))}
             </div>
           )}

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import AppShell from '../components/AppShell';
 import ProjectHealthSection from '../components/project-details/ProjectHealthSection';
@@ -90,26 +90,30 @@ describe('Project health dashboard', () => {
     expect(formatHealthReason('unknown')).toMatch(/needs attention/i);
   });
 
-  test('is lazy, opens from first workspace navigation item, and fetches only Health', async () => {
+  test('loads the selected default Health workspace once without invoking AI', async () => {
+    api.get.mockResolvedValueOnce({ data: { health } });
+    const HealthWorkspace = () => {
+      const location = useLocation();
+      return <ProjectHealthSection projectId="project-1" active={!location.hash || location.hash === '#project-health'} />;
+    };
     render(
       <MemoryRouter initialEntries={['/projects/project-1']}>
         <Routes>
           <Route element={<AppShell />}>
-            <Route path="/projects/:id" element={<ProjectHealthSection projectId="project-1" />} />
+            <Route path="/projects/:id" element={<HealthWorkspace />} />
           </Route>
         </Routes>
       </MemoryRouter>,
     );
 
-    expect(api.get).not.toHaveBeenCalled();
-    const projectNavigation = screen.getByLabelText('Project sections');
-    expect(projectNavigation.querySelector('button')?.textContent).toBe('Health');
-    fireEvent.click(screen.getByRole('button', { name: 'Members' }));
-    expect(api.get).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Health' }));
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/projects/project-1/health'));
-    fireEvent.click(screen.getByRole('button', { name: 'Health' }));
+    const projectNavigation = screen.getByLabelText('Project sections');
+    expect(projectNavigation.querySelector('a')?.textContent).toBe('Health');
+    expect(screen.getByRole('link', { name: 'Health' })).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(screen.getByRole('link', { name: 'Members' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Health' }));
     expect(api.get).toHaveBeenCalledTimes(1);
+    expect(api.post).not.toHaveBeenCalled();
   });
 
   test('announces loading and renders status, progress, metrics, reasons, and attention details', async () => {

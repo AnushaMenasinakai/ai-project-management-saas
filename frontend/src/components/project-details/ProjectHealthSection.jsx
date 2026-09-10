@@ -29,7 +29,7 @@ const metricItems = [
   ['blockedTasks', 'Blocked'],
 ];
 
-const ProjectHealthSection = ({ projectId }) => {
+const ProjectHealthSection = ({ projectId, active = false }) => {
   const {
     health, initialized, loading, error, refreshError, fetchHealth, setHealthSnapshot,
   } = useProjectHealth(projectId);
@@ -38,12 +38,8 @@ const ProjectHealthSection = ({ projectId }) => {
   } = useProjectHealthInsight(projectId);
 
   useEffect(() => {
-    const openFromNavigation = (event) => {
-      if (event.detail?.sectionId === 'project-health') fetchHealth();
-    };
-    window.addEventListener('project-section-open', openFromNavigation);
-    return () => window.removeEventListener('project-section-open', openFromNavigation);
-  }, [fetchHealth]);
+    if (active) fetchHealth();
+  }, [active, fetchHealth]);
 
   const metrics = health?.metrics;
   const hasTasks = Boolean(metrics?.totalTasks);

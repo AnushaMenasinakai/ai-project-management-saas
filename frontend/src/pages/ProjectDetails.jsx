@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import Alert from '../components/Alert';
 import Button from '../components/Button';
 import Card from '../components/Card';
@@ -26,11 +26,18 @@ import useProjectQA from '../hooks/useProjectQA';
 import useProjectTasks from '../hooks/useProjectTasks';
 import api from '../services/api';
 import { formatAiError } from '../utils/aiErrorUtils';
+import { getProjectWorkspace } from '../utils/projectWorkspaceUtils';
+
+const WorkspacePanel = ({ active, children }) => (
+  <div className="project-workspace__panel" hidden={!active}>{children}</div>
+);
 
 const ProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+  const activeWorkspace = getProjectWorkspace(location.hash);
 
   const {
     project,
@@ -274,7 +281,7 @@ const handleGenerateTasks = async () => {
 }
 
 return (
-  <div className="page project-workspace">
+  <div className="page project-workspace" data-active-workspace={activeWorkspace}>
     <ProjectHeader
       project={project}
       isProjectOwner={isProjectOwner}
@@ -286,7 +293,10 @@ return (
       onEdit={startProjectEditing}
       onDelete={deleteProject}
     />
-    <ProjectHealthSection projectId={id} />
+    <WorkspacePanel active={activeWorkspace === 'project-health'}>
+      <ProjectHealthSection projectId={id} active={activeWorkspace === 'project-health'} />
+    </WorkspacePanel>
+    <WorkspacePanel active={activeWorkspace === 'project-members'}>
     <MembersSection
       members={members}
       isProjectOwner={isProjectOwner}
@@ -304,6 +314,8 @@ return (
       onAddMember={addMember}
       onRemoveMember={removeMember}
     />
+    </WorkspacePanel>
+    <WorkspacePanel active={activeWorkspace === 'project-documents'}>
     <DocumentsSection
       documents={documents}
       isProjectOwner={isProjectOwner}
@@ -344,6 +356,8 @@ return (
       onCancelEdit={resetDocumentEdit}
       onDelete={deleteDocument}
     />
+    </WorkspacePanel>
+    <WorkspacePanel active={activeWorkspace === 'project-qa'}>
     <ProjectQASection
       question={ragQuestion}
       answer={ragAnswer}
@@ -354,6 +368,8 @@ return (
       onQuestionChange={(event) => setRagQuestion(event.target.value)}
       onSubmit={askProject}
     />
+    </WorkspacePanel>
+    <WorkspacePanel active={activeWorkspace === 'project-tasks'}>
     <TasksSection
       tasks={tasks}
       filteredTasks={filteredTasks}
@@ -393,7 +409,10 @@ return (
       onCancelEdit={cancelTaskEdit}
       onGenerate={handleGenerateTasks}
     />
-    <ActivitySection projectId={id} />
+    </WorkspacePanel>
+    <WorkspacePanel active={activeWorkspace === 'project-activity'}>
+      <ActivitySection projectId={id} active={activeWorkspace === 'project-activity'} />
+    </WorkspacePanel>
   </div>
 );
 };

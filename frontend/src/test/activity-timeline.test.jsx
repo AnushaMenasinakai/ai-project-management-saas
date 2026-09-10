@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import AppShell from '../components/AppShell';
 import ActivitySection from '../components/project-details/ActivitySection';
@@ -140,21 +140,25 @@ describe('Activity timeline', () => {
   });
 
   test('project navigation opens Activity once for both owner and member UI', async () => {
+    const ActivityWorkspace = () => {
+      const location = useLocation();
+      return <ActivitySection projectId="project-1" active={location.hash === '#project-activity'} />;
+    };
     const renderShell = () => render(
       <MemoryRouter initialEntries={['/projects/project-1']}>
         <Routes>
           <Route element={<AppShell />}>
-            <Route path="/projects/:id" element={<ActivitySection projectId="project-1" />} />
+            <Route path="/projects/:id" element={<ActivityWorkspace />} />
           </Route>
         </Routes>
       </MemoryRouter>,
     );
 
     const ownerView = renderShell();
-    fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Activity' }));
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(1));
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
+    expect(screen.getByRole('link', { name: 'Activity' })).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(screen.getByRole('link', { name: 'Activity' }));
     expect(api.get).toHaveBeenCalledTimes(1);
     ownerView.unmount();
 
@@ -162,7 +166,7 @@ describe('Activity timeline', () => {
     api.get.mockResolvedValue({ data: { activities: [], nextCursor: null } });
     mockUser = { id: 'member-1', name: 'Member', email: 'member@test.local' };
     renderShell();
-    fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Activity' }));
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(1));
   });
 });

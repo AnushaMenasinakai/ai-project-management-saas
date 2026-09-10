@@ -1518,17 +1518,22 @@ select[multiple] { max-width: 100%; }
 .app-shell__subnav-link {
   background: transparent;
   border: 0;
+  border-radius: var(--radius-sm);
   box-shadow: none;
   color: var(--color-text-muted);
+  display: flex;
   justify-content: flex-start;
   min-height: 32px;
   padding: .3rem .5rem;
   text-align: left;
+  text-decoration: none;
 }
 .app-shell__subnav-link:hover:not(:disabled), .app-shell__subnav-link--active { background: var(--color-surface-subtle); border-color: transparent; color: var(--color-primary); }
 .app-shell--collapsed .app-shell__subnav { display: none; }
 
 #project-health, #project-members, #project-tasks, #project-documents, #project-qa, #project-activity { scroll-margin-top: var(--space-5); }
+
+.project-workspace__panel { min-width: 0; }
 
 .activity-section { gap: var(--space-5); }
 .activity-section__header { align-items: flex-start; display: flex; gap: var(--space-4); justify-content: space-between; }
