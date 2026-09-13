@@ -82,6 +82,75 @@ Atlas network access must permit the machine's outbound connection. The health
 endpoint reports HTTP availability, not a continuous database readiness check.
 The existing CORS origin configuration is preserved.
 
+## Deployment configuration (not deployed)
+
+The intended hosts are Vercel for `frontend/`, Render for the existing backend
+Dockerfile, and MongoDB Atlas. These settings prepare a future manual deployment;
+the GitHub Actions workflow only validates code and builds an image.
+
+### Render backend
+
+- Use a Docker web service with repository root as the build context and
+  `./Dockerfile` as the Dockerfile path. Keep its existing startup command.
+- Let Render supply `PORT`; do not copy the local port setting into Render.
+  The server listens on all interfaces and connects to Atlas before listening.
+- Set the health check path to `/api/health`. It returns `{ "status": "ok" }`
+  for HTTP availability; it does not continuously check database readiness.
+- Supply runtime configuration through Render environment settings. Required
+  names: `MONGODB_URI`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `GEMINI_API_KEY`,
+  `EMBEDDING_MODEL`, `FRONTEND_ORIGIN`. Set `NODE_ENV` to `production`.
+  `GEMINI_MODEL` is optional and retains the application default if omitted.
+- Use the Atlas connection string and permit the selected Render service's
+  outbound connections in Atlas during actual deployment. No database service,
+  disk, or Docker volume is required; uploads are processed in memory.
+
+No `render.yaml` is needed for this single service. Manual settings avoid choosing
+a service name, region, plan, or deployment automation before hosting is created.
+
+### Vercel frontend
+
+- Set Root Directory to `frontend`, Framework Preset to Vite, Node.js to 24.x,
+  Install Command to `npm ci`, Build Command to `npm run build`, and Output
+  Directory to `dist` (relative to the frontend root).
+- Set the public `VITE_API_URL` at build time. Rebuild after changing it.
+  Never provide MongoDB, JWT, Gemini, or deployment secrets to the frontend;
+  `VITE_` variables are visible to browsers.
+- `frontend/vercel.json` provides the SPA fallback for BrowserRouter deep links
+  such as `/dashboard`, `/projects/:id`, and `/notifications`. Existing static
+  files are served normally. API requests use the separate configured backend
+  URL; this rewrite does not proxy them.
+
+| Setting | Local development | Future production setting |
+| --- | --- | --- |
+| Frontend `VITE_API_URL` | `http://localhost:5000/api` | `<Render backend HTTPS URL>/api` |
+| Backend `FRONTEND_ORIGIN` | `http://localhost:5173` | `<Vercel frontend HTTPS origin>` |
+
+The angle-bracket entries describe values to supply later, not literal settings.
+CORS permits the single configured origin and requests without an Origin header;
+other browser origins receive no CORS permission. Preview/custom domains are not
+automatically allowed. JWTs remain in browser localStorage and travel in the
+Authorization Bearer header; no session cookies or credential-mode changes are
+needed for HTTPS between these two hosts.
+
+### Proxy verification before public use
+
+Express currently leaves `trust proxy` disabled. With Express 4.22.2 and
+express-rate-limit 8.7.0, the login/register limiter uses `req.ip`; behind a proxy
+this can group users under the proxy IP. The AI limiter primarily uses user IDs.
+Do not treat the current proxy configuration as approved for public traffic.
+During actual Render setup, verify the forwarding chain and header sanitization,
+then configure the narrowest verified proxy trust before the limiters. Do not
+blindly enable `trust proxy: true` or guess a hop count. Verify distinct clients
+have separate limits and forged forwarding headers cannot bypass them. This
+change is deferred until that topology can be verified; local behavior stays
+unchanged. The existing limiter store is per process, so multiple replicas would
+also need a separate rate-limit design review before scaling.
+
+References: [Vercel Vite SPA routing](https://vercel.com/docs/frameworks/frontend/vite),
+[Render web services](https://render.com/docs/web-services),
+[Express proxy trust](https://expressjs.com/en/guide/behind-proxies.html), and
+[rate-limit proxy guidance](https://express-rate-limit.mintlify.app/guides/troubleshooting-proxy-issues).
+
 ## Health check
 
 `GET /api/health`
