@@ -57,7 +57,7 @@ const Login = () => {
             name="email"
             type="email"
             autoComplete="email"
-            placeholder="you@example.com"
+            placeholder="Enter your email"
             value={form.email}
             onChange={handleChange}
             required
