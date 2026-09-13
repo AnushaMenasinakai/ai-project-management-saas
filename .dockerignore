@@ -1,0 +1,27 @@
+# Allow only backend runtime inputs into the build context.
+**
+!package.json
+!package-lock.json
+!src/
+!src/**
+
+# Keep secrets and local artifacts excluded even if placed under src/.
+**/node_modules
+**/.env
+**/.env.*
+**/*.log
+**/coverage
+**/.nyc_output
+**/test-results
+**/test-output
+**/tests
+**/__tests__
+**/*.test.js
+**/*.spec.js
+**/.git
+**/.idea
+**/.vscode
+**/.DS_Store
+**/Thumbs.db
+**/*~
+**/*.swp
