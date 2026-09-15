@@ -86,7 +86,7 @@ describe('document upload behavior', () => {
     expect(body.get('projectId')).toBe('project-1');
     expect(body.get('title')).toBe('Project notes');
     expect(body.get('file')).toBe(file);
-    expect(config).toBeUndefined();
+    expect(config).toEqual({ headers: { 'Content-Type': undefined } });
     expect(result.current.uploadFile).toBeNull();
     expect(result.current.uploadTitle).toBe('');
     expect(result.current.uploadDocumentSuccess).toMatch(/uploaded and indexed/i);

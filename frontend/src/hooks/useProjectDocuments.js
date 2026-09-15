@@ -144,7 +144,9 @@ const useProjectDocuments = (projectId) => {
     formData.append('file', currentUpload.file);
 
     try {
-      await api.post('/documents/upload', formData);
+      await api.post('/documents/upload', formData, {
+        headers: { 'Content-Type': undefined },
+      });
       if (projectIdRef.current !== requestProjectId || uploadRequestIdRef.current !== requestId) return;
       setUploadResource((current) => ({
         ...current,
