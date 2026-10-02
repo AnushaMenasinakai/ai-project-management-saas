@@ -1,3 +1,4 @@
+import ReactMarkdown from 'react-markdown';
 import Alert from '../Alert';
 import Button from '../Button';
 import Card from '../Card';
@@ -55,7 +56,9 @@ const ProjectQASection = ({
             The answer below is from the previous successful question.
           </p>
         )}
-        <p>{answer}</p>
+        <div className="project-qa-answer__markdown">
+          <ReactMarkdown>{answer}</ReactMarkdown>
+        </div>
       </div>
     )}
     {sources.length > 0 && (

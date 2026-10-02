@@ -2,9 +2,9 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 import ProjectQASection from '../components/project-details/ProjectQASection';
 
-const renderSection = (sources) => render(<ProjectQASection
+const renderSection = (sources, answer = "The release is phased. [S1]") => render(<ProjectQASection
   question="What is the release plan?"
-  answer="The release is phased. [S1]"
+  answer={answer}
   answerQuestion="What is the release plan?"
   sources={sources}
   loading={false}
@@ -33,5 +33,33 @@ describe('ground source display', () => {
     expect(screen.getByText('Notes')).toBeInTheDocument();
     expect(screen.getByText('Legacy excerpt.')).toBeInTheDocument();
     expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument();
+  });
+});
+
+
+describe('Markdown answer rendering', () => {
+  test('renders bold labels and lists while preserving citation text', () => {
+    const { container } = renderSection([], '**Backend Technologies:**\n* **Runtime:** Node.js [S1, S2]\n* **Web Framework:** Express.js [S1, S2]');
+    const answer = container.querySelector('.project-qa-answer__markdown');
+    expect(answer.querySelector('strong')).toHaveTextContent('Backend Technologies:');
+    expect(answer.querySelectorAll('ul > li')).toHaveLength(2);
+    expect(answer.querySelector('li').textContent).toBe('Runtime: Node.js [S1, S2]');
+    expect(answer.textContent).not.toContain('**');
+  });
+
+  test('renders headings, paragraphs, ordered lists and individual source labels', () => {
+    const { container } = renderSection([], '## Next steps\n\nReview the plan. [S1]\n\n1. Build\n2. Test [S2]');
+    const answer = container.querySelector('.project-qa-answer__markdown');
+    expect(answer.querySelector('h2')).toHaveTextContent('Next steps');
+    expect(answer.querySelector('p').textContent).toBe('Review the plan. [S1]');
+    expect(answer.querySelectorAll('ol > li')).toHaveLength(2);
+    expect(answer.querySelectorAll('li')[1].textContent).toBe('Test [S2]');
+  });
+
+  test('does not interpret raw HTML or allow executable links', () => {
+    const { container } = renderSection([], '<img src=x onerror="alert(1)">\n\n[unsafe](javascript:alert%281%29)');
+    const answer = container.querySelector('.project-qa-answer__markdown');
+    expect(answer.querySelector('img')).toBeNull();
+    expect(answer.querySelector('a')).not.toHaveAttribute('href', expect.stringMatching(/^javascript:/));
   });
 });
