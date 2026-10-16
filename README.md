@@ -4,6 +4,19 @@ Orbit PM is a deployed full-stack collaborative project-management SaaS that bri
 
 Gemini powers document Q&A, task generation, and optional interpretation of deterministic project-health metrics. The repository is named `ai-project-management-saas`.
 
+**[Live Application](https://ai-project-management-saas-lac.vercel.app)**
+
+## Quick Navigation
+
+- [Screenshots](#screenshots)
+- [Key Features](#key-features)
+- [AI Capabilities & Document Q&A](#ai-capabilities--document-qa)
+- [Architecture](#architecture)
+- [Technology Stack](#technology-stack)
+- [Testing](#testing)
+- [CI/CD & Deployment](#cicd--deployment)
+- [Local Development](#local-development)
+
 ## Screenshots
 
 ### Dashboard
@@ -186,12 +199,12 @@ These budgets apply to individual wrapped provider operations, not an entire mul
 
 ## Testing
 
-The latest completed repository audit verified:
+Latest local verification (17 October 2026):
 
 | Suite | Passing tests | Organization |
 | --- | --- | --- |
 | Backend | **177 / 177** | 14 Jest suites |
-| Frontend | **129 / 129** | 19 Vitest test files |
+| Frontend | **132 / 132** | 19 Vitest test files |
 
 Backend Jest/Supertest tests cover authorization, API behavior, task validation, comments, activity, notifications, document extraction, RAG retrieval, health calculations, transactions/rollback behavior, and Gemini reliability. External database/provider behavior is mocked in the automated suites.
 
